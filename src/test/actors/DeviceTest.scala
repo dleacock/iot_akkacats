@@ -5,13 +5,16 @@ import actors.Device.Response.DeviceCreatedResponse
 import actors.Device.{Command, DeviceCreated, DeviceState, Event, Response}
 import akka.actor.testkit.typed.scaladsl.{LogCapturing, ScalaTestWithActorTestKit}
 import akka.persistence.testkit.scaladsl.EventSourcedBehaviorTestKit
+import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.util.UUID
 
 class DeviceTest
-  extends ScalaTestWithActorTestKit(EventSourcedBehaviorTestKit.config)
+  extends ScalaTestWithActorTestKit(
+    ConfigFactory.parseString("akka.actor.allow-java-serialization = on")
+      .withFallback(EventSourcedBehaviorTestKit.config))
     with AnyWordSpecLike
     with BeforeAndAfterEach
     with LogCapturing {
@@ -30,10 +33,11 @@ class DeviceTest
   "A Device" must {
 
     "be created with initial state" in {
-      val result = eventSourcedTestKit.runCommand[Response](replyTo => CreateDevice(id, "state", replyTo))
+      val initialState = "initial_state"
+      val result = eventSourcedTestKit.runCommand[Response](replyTo => CreateDevice(id, initialState, replyTo))
       result.reply shouldBe DeviceCreatedResponse(id)
-      result.event shouldBe DeviceCreated(id)
-      result.stateOfType[DeviceState].state shouldBe "state"
+      result.event shouldBe DeviceCreated(id, initialState)
+      result.stateOfType[DeviceState].state shouldBe initialState
       result.stateOfType[DeviceState].id shouldBe id
     }
 

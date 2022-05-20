@@ -1,5 +1,6 @@
 package actors
 
+import actors.Device.Response.DeviceCreatedResponse
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
@@ -20,7 +21,7 @@ object Device {
 
   sealed trait Event
 
-  case class DeviceCreated(id: String) extends Event
+  case class DeviceCreated(id: String, initialState: String) extends Event
 
   case class DeviceUpdated(newState: String) extends Event
 
@@ -43,7 +44,10 @@ object Device {
   val commandHandler: (DeviceState, Command) => Effect[Event, DeviceState] =
     (state, command) => {
       command match {
-        case CreateDevice(id, initialState, replyTo) => ???
+        case CreateDevice(id, initialState, replyTo) =>
+          Effect
+            .persist(DeviceCreated(id, initialState))
+            .thenReply(replyTo)(_ => DeviceCreatedResponse(id))
         case UpdateDevice(id, newState, replyTo) => ???
         case GetDeviceState(id, replyTo) => ???
       }
@@ -52,7 +56,7 @@ object Device {
   val eventHandler: (DeviceState, Event) => DeviceState =
     (state, event) =>
       event match {
-        case DeviceCreated(id) => ???
+        case DeviceCreated(id, state) => DeviceState(id, state)
         case DeviceUpdated(newState) => ???
       }
 
