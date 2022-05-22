@@ -1,7 +1,7 @@
 package actors
 
-import actors.Device.Command.{CreateDevice, UpdateDevice}
-import actors.Device.Response.{DeviceCreatedResponse, DeviceStateUpdatedResponse}
+import actors.Device.Command.{CreateDevice, GetDeviceState, UpdateDevice}
+import actors.Device.Response.{DeviceCreatedResponse, DeviceStateUpdatedResponse, GetDeviceStateResponse}
 import actors.Device.{Command, DeviceCreated, DeviceState, DeviceUpdated, Event, Response}
 import akka.actor.testkit.typed.scaladsl.{LogCapturing, ScalaTestWithActorTestKit}
 import akka.persistence.testkit.scaladsl.EventSourcedBehaviorTestKit
@@ -54,8 +54,11 @@ class DeviceTest
     }
 
     "handle get" in {
+      eventSourcedTestKit.runCommand[Response](replyTo => CreateDevice(id, initialState, replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => UpdateDevice(id, updatedState, replyTo))
 
-
+      val result = eventSourcedTestKit.runCommand[Response](replyTo => GetDeviceState(id, replyTo))
+      result.reply shouldBe GetDeviceStateResponse(Some(DeviceState(id, updatedState)))
     }
   }
 }

@@ -1,6 +1,6 @@
 package actors
 
-import actors.Device.Response.{DeviceCreatedResponse, DeviceStateUpdatedResponse}
+import actors.Device.Response.{DeviceCreatedResponse, DeviceStateUpdatedResponse, GetDeviceStateResponse}
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
@@ -54,7 +54,8 @@ object Device {
           Effect
             .persist(DeviceUpdated(newState))
             .thenReply(replyTo)(updatedDeviceState => DeviceStateUpdatedResponse(Success(updatedDeviceState)))
-        case GetDeviceState(id, replyTo) => ???
+        case GetDeviceState(id, replyTo) =>
+          Effect.reply(replyTo)(GetDeviceStateResponse(Some(currentDeviceState)))
       }
     }
 
