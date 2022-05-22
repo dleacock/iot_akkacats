@@ -1,11 +1,13 @@
 package actors
 
-import actors.Device.Response.DeviceCreatedResponse
+import actors.Device.Response.{DeviceCreatedResponse, DeviceStateUpdatedResponse}
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 
-import scala.util.Try
+import scala.util.{Success, Try}
+
+// TODO This needs to be a finite state machine eventually
 
 object Device {
 
@@ -42,13 +44,16 @@ object Device {
   import Command._
 
   val commandHandler: (DeviceState, Command) => Effect[Event, DeviceState] =
-    (state, command) => {
+    (currentDeviceState, command) => {
       command match {
         case CreateDevice(id, initialState, replyTo) =>
           Effect
             .persist(DeviceCreated(id, initialState))
             .thenReply(replyTo)(_ => DeviceCreatedResponse(id))
-        case UpdateDevice(id, newState, replyTo) => ???
+        case UpdateDevice(id, newState, replyTo) =>
+          Effect
+            .persist(DeviceUpdated(newState))
+            .thenReply(replyTo)(updatedDeviceState => DeviceStateUpdatedResponse(Success(updatedDeviceState)))
         case GetDeviceState(id, replyTo) => ???
       }
     }
@@ -57,7 +62,7 @@ object Device {
     (state, event) =>
       event match {
         case DeviceCreated(id, state) => DeviceState(id, state)
-        case DeviceUpdated(newState) => ???
+        case DeviceUpdated(newState) => state.copy(id = state.id, state = newState)
       }
 
   def apply(id: String): Behavior[Command] =
