@@ -1,6 +1,6 @@
 package actors
 
-import actors.Device.Response.{DeviceCreatedResponse, DeviceStateUpdatedResponse, GetDeviceStateResponse}
+import actors.Device.Response.{DeviceAlertedResponse, DeviceDisabledResponse, DeviceInitializedResponse, DeviceStateUpdatedResponse, DeviceStopAlertResponse, GetDeviceStateResponse}
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
@@ -14,62 +14,110 @@ object Device {
   sealed trait Command
 
   object Command {
-    case class CreateDevice(id: String, initialState: String, replyTo: ActorRef[Response]) extends Command
+    case class InitializeDevice(id: String, name: String, replyTo: ActorRef[Response]) extends Command
 
-    case class UpdateDevice(id: String, newState: String, replyTo: ActorRef[Response]) extends Command
+    case class DisableDevice(id: String, replyTo: ActorRef[Response]) extends Command
+
+    case class AlertDevice(id: String, message: String, replyTo: ActorRef[Response]) extends Command
+
+    case class StopAlert(id: String, replyTo: ActorRef[Response]) extends Command
 
     case class GetDeviceState(id: String, replyTo: ActorRef[Response]) extends Command
   }
 
   sealed trait Event
+  // TODO do I need the id for the event?
 
-  case class DeviceCreated(id: String, initialState: String) extends Event
+  case class DeviceInitialized(id: String, initialState: String) extends Event
 
-  case class DeviceUpdated(newState: String) extends Event
+  case class DeviceAlerted(message: String) extends Event
+
+  case class DeviceAlertStopped(id: String) extends Event
+
+  case class DeviceDisabled(id: String) extends Event
 
   sealed trait Response
 
   object Response {
-    case class DeviceCreatedResponse(id: String) extends Response
+    case class DeviceInitializedResponse(id: String) extends Response
 
     // TODO Either?
-    case class DeviceStateUpdatedResponse(maybeDevice: Try[DeviceState]) extends Response
+    // TODO coalesce these responses, lots of repeating
+    case class DeviceAlertedResponse(maybeDevice: Try[Device]) extends Response
 
-    case class GetDeviceStateResponse(maybeDevice: Option[DeviceState]) extends Response
+    case class DeviceStopAlertResponse(maybeDevice: Try[Device]) extends Response
+
+    case class DeviceStateUpdatedResponse(maybeDevice: Try[Device]) extends Response
+
+    case class DeviceDisabledResponse(maybeDevice: Try[Device]) extends Response
+
+    case class GetDeviceStateResponse(maybeDevice: Option[State]) extends Response
   }
 
   // TODO use case class for state
-  case class DeviceState(id: String, state: String)
+  sealed trait State
+
+  case class Inactive(device: Device) extends State
+
+  case class Monitoring(device: Device) extends State
+
+  case class Alerting(device: Device) extends State
+
+  case class Device(id: String, name: String)
 
   import Command._
 
-  val commandHandler: (DeviceState, Command) => Effect[Event, DeviceState] =
-    (currentDeviceState, command) => {
-      command match {
-        case CreateDevice(id, initialState, replyTo) =>
-          Effect
-            .persist(DeviceCreated(id, initialState))
-            .thenReply(replyTo)(_ => DeviceCreatedResponse(id))
-        case UpdateDevice(id, newState, replyTo) =>
-          Effect
-            .persist(DeviceUpdated(newState))
-            .thenReply(replyTo)(updatedDeviceState => DeviceStateUpdatedResponse(Success(updatedDeviceState)))
-        case GetDeviceState(id, replyTo) =>
-          Effect.reply(replyTo)(GetDeviceStateResponse(Some(currentDeviceState)))
+  val commandHandler: (State, Command) => Effect[Event, State] =
+    (state, command) => {
+      state match {
+        case Inactive(device) =>
+          command match {
+            case InitializeDevice(id, name, replyTo) =>
+              Effect
+                .persist(DeviceInitialized(id, name))
+                .thenReply(replyTo)(_ => DeviceInitializedResponse(id))
+            case GetDeviceState(id, replyTo) =>
+              Effect.reply(replyTo)(GetDeviceStateResponse(Some(Inactive(device))))
+            case _ => Effect.none
+          }
+        case Monitoring(device) =>
+          command match {
+            case AlertDevice(id, message, replyTo) =>
+              Effect
+                .persist(DeviceAlerted(message))
+                .thenReply(replyTo)(_ => DeviceAlertedResponse(Success(device)))
+            case DisableDevice(id, replyTo) =>
+              Effect
+                .persist(DeviceDisabled(id))
+                .thenReply(replyTo)(_ => DeviceDisabledResponse(Success(device)))
+            case GetDeviceState(id, replyTo) =>
+              Effect.reply(replyTo)(GetDeviceStateResponse(Some(Monitoring(device))))
+            case _ => Effect.none
+          }
+        case Alerting(device) =>
+          command match {
+            case StopAlert(id, replyTo) =>
+              Effect
+                .persist(DeviceAlertStopped(id))
+                .thenReply(replyTo)(_ => DeviceStopAlertResponse(Success(device)))
+            case GetDeviceState(id, replyTo) =>
+              Effect.reply(replyTo)(GetDeviceStateResponse(Some(Alerting(device))))
+            case _ => Effect.none
+          }
       }
     }
 
-  val eventHandler: (DeviceState, Event) => DeviceState =
-    (state, event) =>
-      event match {
-        case DeviceCreated(id, state) => DeviceState(id, state)
-        case DeviceUpdated(newState) => state.copy(id = state.id, state = newState)
-      }
+  val eventHandler: (State, Event) => State = ???
+  //    (state, event) =>
+  //      event match {
+  //        case DeviceInitialized(id, state) => Device(id, state)
+  //        case DeviceStateUpdated(newState) => state.copy(id = state.id, state = newState)
+  //      }
 
   def apply(id: String): Behavior[Command] =
-    EventSourcedBehavior[Command, Event, DeviceState](
+    EventSourcedBehavior[Command, Event, State](
       persistenceId = PersistenceId.ofUniqueId(id),
-      emptyState = DeviceState(id, ""), // TODO come up with better empty state
+      emptyState = Inactive(Device(id, "")), // TODO come up with better empty state
       commandHandler = commandHandler,
       eventHandler = eventHandler
     )
