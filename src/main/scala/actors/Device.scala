@@ -1,13 +1,11 @@
 package actors
 
-import actors.Device.Response.{DeviceAlertedResponse, DeviceDisabledResponse, DeviceInitializedResponse, DeviceStateUpdatedResponse, DeviceStopAlertResponse, GetDeviceStateResponse}
+import actors.Device.Response._
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 
 import scala.util.{Success, Try}
-
-// TODO This needs to be a finite state machine eventually
 
 object Device {
 
@@ -54,7 +52,6 @@ object Device {
     case class GetDeviceStateResponse(maybeDevice: Option[State]) extends Response
   }
 
-  // TODO use case class for state
   sealed trait State
 
   case class Inactive(device: Device) extends State
@@ -107,17 +104,28 @@ object Device {
       }
     }
 
-  val eventHandler: (State, Event) => State = ???
-  //    (state, event) =>
-  //      event match {
-  //        case DeviceInitialized(id, state) => Device(id, state)
-  //        case DeviceStateUpdated(newState) => state.copy(id = state.id, state = newState)
-  //      }
+  val eventHandler: (State, Event) => State =
+    (state, event) =>
+      state match {
+        case inactive@Inactive(device) => event match {
+          case DeviceInitialized(id, initialState) => ???
+          case _ => inactive
+        }
+        case monitoring@Monitoring(device) => event match {
+          case DeviceAlerted(message) => ???
+          case DeviceDisabled(id) => ???
+          case _ => monitoring
+        }
+        case alerting@Alerting(device) => event match {
+          case DeviceAlertStopped(id) => ???
+          case _ => alerting
+        }
+      }
 
-  def apply(id: String): Behavior[Command] =
+  def apply(id: String, name: String): Behavior[Command] =
     EventSourcedBehavior[Command, Event, State](
       persistenceId = PersistenceId.ofUniqueId(id),
-      emptyState = Inactive(Device(id, "")), // TODO come up with better empty state
+      emptyState = Inactive(Device(id, name)), // TODO come up with better empty state
       commandHandler = commandHandler,
       eventHandler = eventHandler
     )
