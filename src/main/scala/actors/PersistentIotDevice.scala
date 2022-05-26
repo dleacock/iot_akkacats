@@ -1,18 +1,18 @@
 package actors
 
-import actors.Device.Response._
+import actors.PersistentIotDevice.Response._
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 
 import scala.util.{Success, Try}
 
-object Device {
+object PersistentIotDevice {
 
   sealed trait Command
 
   object Command {
-    case class InitializeDevice(id: String, name: String, replyTo: ActorRef[Response]) extends Command
+    case class InitializeDevice(id: String, replyTo: ActorRef[Response]) extends Command
 
     case class DisableDevice(id: String, replyTo: ActorRef[Response]) extends Command
 
@@ -26,9 +26,9 @@ object Device {
   sealed trait Event
   // TODO do I need the id for the event?
 
-  case class DeviceInitialized(id: String, initialState: String) extends Event
+  case class DeviceInitialized(id: String) extends Event
 
-  case class DeviceAlerted(message: String) extends Event
+  case class DeviceAlerted(id: String, message: String) extends Event
 
   case class DeviceAlertStopped(id: String) extends Event
 
@@ -69,9 +69,9 @@ object Device {
       state match {
         case Inactive(device) =>
           command match {
-            case InitializeDevice(id, name, replyTo) =>
+            case InitializeDevice(id, replyTo) =>
               Effect
-                .persist(DeviceInitialized(id, name))
+                .persist(DeviceInitialized(id))
                 .thenReply(replyTo)(_ => DeviceInitializedResponse(id))
             case GetDeviceState(id, replyTo) =>
               Effect.reply(replyTo)(GetDeviceStateResponse(Some(Inactive(device))))
@@ -81,7 +81,7 @@ object Device {
           command match {
             case AlertDevice(id, message, replyTo) =>
               Effect
-                .persist(DeviceAlerted(message))
+                .persist(DeviceAlerted(id, message))
                 .thenReply(replyTo)(_ => DeviceAlertedResponse(Success(device)))
             case DisableDevice(id, replyTo) =>
               Effect
@@ -108,16 +108,16 @@ object Device {
     (state, event) =>
       state match {
         case inactive@Inactive(device) => event match {
-          case DeviceInitialized(id, initialState) => ???
+          case DeviceInitialized(id) => Monitoring(device)
           case _ => inactive
         }
         case monitoring@Monitoring(device) => event match {
-          case DeviceAlerted(message) => ???
-          case DeviceDisabled(id) => ???
+          case DeviceAlerted(id, message) => Alerting(device)
+          case DeviceDisabled(id) => Inactive(device)
           case _ => monitoring
         }
         case alerting@Alerting(device) => event match {
-          case DeviceAlertStopped(id) => ???
+          case DeviceAlertStopped(id) => Monitoring(device)
           case _ => alerting
         }
       }
