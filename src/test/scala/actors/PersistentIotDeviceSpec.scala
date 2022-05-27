@@ -10,6 +10,8 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.util.UUID
+import java.util.concurrent.TimeUnit
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Success
 
 class PersistentIotDeviceSpec
@@ -22,6 +24,8 @@ class PersistentIotDeviceSpec
 
   private val id: String = UUID.randomUUID().toString
   private val name: String = "test_device"
+  private val probeWaitDuration = FiniteDuration(500, TimeUnit.MILLISECONDS)
+
   private val eventSourcedTestKit: EventSourcedBehaviorTestKit[Command, Event, State] =
     EventSourcedBehaviorTestKit[Command, Event, State](
       system,
@@ -42,13 +46,21 @@ class PersistentIotDeviceSpec
       result.stateOfType[Inactive].device shouldBe device
     }
 
+    "not become in an alerting state without initialization" in {
+      val testProbe = testKit.createTestProbe[Response]("test_probe")
+      val result = eventSourcedTestKit.runCommand(AlertDevice(id, alertMessage, testProbe.ref))
+
+      testProbe.expectNoMessage(probeWaitDuration)
+      result.hasNoEvents shouldBe true
+    }
+
     "start monitoring once initialized" in {
       val result = eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(id, replyTo))
       result.reply shouldBe DeviceInitializedResponse(id)
       result.stateOfType[Monitoring].device shouldBe device
     }
 
-    "become Alerting when device is alerted after being initialized" in {
+    "become alerting when device is alerted after being initialized" in {
       eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(id, replyTo))
 
       val result = eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(id, alertMessage, replyTo))
@@ -56,13 +68,24 @@ class PersistentIotDeviceSpec
       result.stateOfType[Alerting].device shouldBe device
     }
 
-    "stop Alerting and go back to Monitoring" in {
+    "stop alerting and go back to monitoring" in {
       eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(id, replyTo))
       eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(id, alertMessage, replyTo))
 
       val result = eventSourcedTestKit.runCommand[Response](replyTo => StopAlert(id, replyTo))
       result.reply shouldBe DeviceStopAlertResponse(Success(device))
       result.stateOfType[Monitoring].device shouldBe device
+    }
+
+    "not become disabled without an alert being stopping first" in {
+      eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(id, replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(id, alertMessage, replyTo))
+
+      val testProbe = testKit.createTestProbe[Response]("test_probe")
+      val result = eventSourcedTestKit.runCommand(DisableDevice(id, testProbe.ref))
+
+      testProbe.expectNoMessage(probeWaitDuration)
+      result.hasNoEvents shouldBe true
     }
   }
 }

@@ -7,6 +7,7 @@ import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 
 import scala.util.{Success, Try}
 
+// TODO inject a notification service for command handler to contact upon alerting
 object PersistentIotDevice {
 
   sealed trait Command
