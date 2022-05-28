@@ -25,7 +25,6 @@ object PersistentIotDevice {
   }
 
   sealed trait Event
-  // TODO do I need the id for the event?
 
   case class DeviceInitialized() extends Event
 
