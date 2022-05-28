@@ -13,32 +13,32 @@ object PersistentIotDevice {
   sealed trait Command
 
   object Command {
-    case class InitializeDevice(id: String, replyTo: ActorRef[Response]) extends Command
+    case class InitializeDevice(replyTo: ActorRef[Response]) extends Command
 
-    case class DisableDevice(id: String, replyTo: ActorRef[Response]) extends Command
+    case class DisableDevice(replyTo: ActorRef[Response]) extends Command
 
-    case class AlertDevice(id: String, message: String, replyTo: ActorRef[Response]) extends Command
+    case class AlertDevice(message: String, replyTo: ActorRef[Response]) extends Command
 
-    case class StopAlert(id: String, replyTo: ActorRef[Response]) extends Command
+    case class StopAlert(replyTo: ActorRef[Response]) extends Command
 
-    case class GetDeviceState(id: String, replyTo: ActorRef[Response]) extends Command
+    case class GetDeviceState(replyTo: ActorRef[Response]) extends Command
   }
 
   sealed trait Event
   // TODO do I need the id for the event?
 
-  case class DeviceInitialized(id: String) extends Event
+  case class DeviceInitialized() extends Event
 
-  case class DeviceAlerted(id: String, message: String) extends Event
+  case class DeviceAlerted(message: String) extends Event
 
-  case class DeviceAlertStopped(id: String) extends Event
+  case class DeviceAlertStopped() extends Event
 
-  case class DeviceDisabled(id: String) extends Event
+  case class DeviceDisabled() extends Event
 
   sealed trait Response
 
   object Response {
-    case class DeviceInitializedResponse(id: String) extends Response
+    case class DeviceInitializedResponse() extends Response
 
     // TODO Either?
     // TODO coalesce these responses, lots of repeating
@@ -70,35 +70,35 @@ object PersistentIotDevice {
       state match {
         case Inactive(device) =>
           command match {
-            case InitializeDevice(id, replyTo) =>
+            case InitializeDevice(replyTo) =>
               Effect
-                .persist(DeviceInitialized(id))
-                .thenReply(replyTo)(_ => DeviceInitializedResponse(id))
-            case GetDeviceState(id, replyTo) =>
+                .persist(DeviceInitialized())
+                .thenReply(replyTo)(_ => DeviceInitializedResponse())
+            case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(GetDeviceStateResponse(Some(Inactive(device))))
             case _ => Effect.none
           }
         case Monitoring(device) =>
           command match {
-            case AlertDevice(id, message, replyTo) =>
+            case AlertDevice(message, replyTo) =>
               Effect
-                .persist(DeviceAlerted(id, message))
+                .persist(DeviceAlerted(message))
                 .thenReply(replyTo)(_ => DeviceAlertedResponse(Success(device)))
-            case DisableDevice(id, replyTo) =>
+            case DisableDevice(replyTo) =>
               Effect
-                .persist(DeviceDisabled(id))
+                .persist(DeviceDisabled())
                 .thenReply(replyTo)(_ => DeviceDisabledResponse(Success(device)))
-            case GetDeviceState(id, replyTo) =>
+            case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(GetDeviceStateResponse(Some(Monitoring(device))))
             case _ => Effect.none
           }
         case Alerting(device) =>
           command match {
-            case StopAlert(id, replyTo) =>
+            case StopAlert(replyTo) =>
               Effect
-                .persist(DeviceAlertStopped(id))
+                .persist(DeviceAlertStopped())
                 .thenReply(replyTo)(_ => DeviceStopAlertResponse(Success(device)))
-            case GetDeviceState(id, replyTo) =>
+            case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(GetDeviceStateResponse(Some(Alerting(device))))
             case _ => Effect.none
           }
@@ -109,16 +109,16 @@ object PersistentIotDevice {
     (state, event) =>
       state match {
         case inactive@Inactive(device) => event match {
-          case DeviceInitialized(id) => Monitoring(device)
+          case DeviceInitialized() => Monitoring(device)
           case _ => inactive
         }
         case monitoring@Monitoring(device) => event match {
-          case DeviceAlerted(id, message) => Alerting(device)
-          case DeviceDisabled(id) => Inactive(device)
+          case DeviceAlerted(message) => Alerting(device) // TODO persist message
+          case DeviceDisabled() => Inactive(device)
           case _ => monitoring
         }
         case alerting@Alerting(device) => event match {
-          case DeviceAlertStopped(id) => Monitoring(device)
+          case DeviceAlertStopped() => Monitoring(device)
           case _ => alerting
         }
       }
