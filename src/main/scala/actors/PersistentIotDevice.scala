@@ -61,7 +61,7 @@ object PersistentIotDevice {
 
   case class Alerting(device: Device) extends State
 
-  case class Device(id: String, name: String)
+  case class Device(id: String, name: String, stateMsg: Option[String])
 
   import Command._
 
@@ -83,7 +83,7 @@ object PersistentIotDevice {
             case AlertDevice(message, replyTo) =>
               Effect
                 .persist(DeviceAlerted(message))
-                .thenReply(replyTo)(_ => DeviceAlertedResponse(Success(device)))
+                .thenReply(replyTo)(_ => DeviceAlertedResponse(Success(device.copy(stateMsg = Some(message)))))
             case DisableDevice(replyTo) =>
               Effect
                 .persist(DeviceDisabled())
@@ -97,7 +97,7 @@ object PersistentIotDevice {
             case StopAlert(replyTo) =>
               Effect
                 .persist(DeviceAlertStopped())
-                .thenReply(replyTo)(_ => DeviceStopAlertResponse(Success(device)))
+                .thenReply(replyTo)(_ => DeviceStopAlertResponse(Success(device.copy(stateMsg = None))))
             case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(GetDeviceStateResponse(Some(Alerting(device))))
             case _ => Effect.none
@@ -113,12 +113,12 @@ object PersistentIotDevice {
           case _ => inactive
         }
         case monitoring@Monitoring(device) => event match {
-          case DeviceAlerted(message) => Alerting(device) // TODO persist message
+          case DeviceAlerted(message) => Alerting(device.copy(stateMsg = Some(message)))
           case DeviceDisabled() => Inactive(device)
           case _ => monitoring
         }
         case alerting@Alerting(device) => event match {
-          case DeviceAlertStopped() => Monitoring(device)
+          case DeviceAlertStopped() => Monitoring(device.copy(stateMsg = None))
           case _ => alerting
         }
       }
@@ -126,7 +126,7 @@ object PersistentIotDevice {
   def apply(id: String, name: String): Behavior[Command] =
     EventSourcedBehavior[Command, Event, State](
       persistenceId = PersistenceId.ofUniqueId(id),
-      emptyState = Inactive(Device(id, name)), // TODO come up with better empty state
+      emptyState = Inactive(Device(id, name, None)),
       commandHandler = commandHandler,
       eventHandler = eventHandler
     )

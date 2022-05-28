@@ -37,8 +37,9 @@ class PersistentIotDeviceSpec
   }
 
   "A Device" must {
-    val device = Device(id, name)
+    val device = Device(id, name, None)
     val alertMessage = "alert_message"
+    val alertedDevice = Device(id, name, Some(alertMessage))
 
     "be created in inactive state" in {
       val result = eventSourcedTestKit.runCommand[Response](replyTo => GetDeviceState(replyTo))
@@ -64,8 +65,17 @@ class PersistentIotDeviceSpec
       eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(replyTo))
 
       val result = eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(alertMessage, replyTo))
-      result.reply shouldBe DeviceAlertedResponse(Success(device))
-      result.stateOfType[Alerting].device shouldBe device
+      result.reply shouldBe DeviceAlertedResponse(Success(alertedDevice))
+      result.stateOfType[Alerting].device shouldBe alertedDevice
+    }
+
+    "reply with alert message when queried when device is alerted" in {
+      eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(alertMessage, replyTo))
+      val result = eventSourcedTestKit.runCommand[Response](replyTo => GetDeviceState(replyTo))
+
+      result.reply shouldBe GetDeviceStateResponse(Some(Alerting(alertedDevice)))
+      result.stateOfType[Alerting].device shouldBe alertedDevice
     }
 
     "stop alerting and go back to monitoring" in {
@@ -74,6 +84,17 @@ class PersistentIotDeviceSpec
 
       val result = eventSourcedTestKit.runCommand[Response](replyTo => StopAlert(replyTo))
       result.reply shouldBe DeviceStopAlertResponse(Success(device))
+      result.stateOfType[Monitoring].device shouldBe device
+    }
+
+    "reply with no message when queried when device is back to monitor after alerted" in {
+      eventSourcedTestKit.runCommand[Response](replyTo => InitializeDevice(replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(alertMessage, replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => StopAlert(replyTo))
+
+      val result = eventSourcedTestKit.runCommand[Response](replyTo => GetDeviceState(replyTo))
+
+      result.reply shouldBe GetDeviceStateResponse(Some(Monitoring(device)))
       result.stateOfType[Monitoring].device shouldBe device
     }
 
