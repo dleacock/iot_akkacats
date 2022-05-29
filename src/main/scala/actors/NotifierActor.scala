@@ -16,7 +16,6 @@ object NotifierActor {
   case class Notify(replyTo: ActorRef[NotifierResponse]) extends NotifierMessage
 
   case class NotifierResponse(response: String) extends NotifierMessage
-
 }
 
 class NotifierActor(context: ActorContext[NotifierMessage], notifier: Notifier)
