@@ -7,6 +7,11 @@ import akka.actor.typed.scaladsl.ActorContext
 import akka.actor.typed.scaladsl.Behaviors
 import notifier.Notifier
 
+// TODO How does the current api for Notifier work with the actor message based stuff?
+// How do I translate the Future[String] => NotifierResponse.. does that also need to be a future?
+
+// TODO create tests
+
 object NotifierActor {
   def apply(notifier: Notifier): Behavior[NotifierMessage] =
     Behaviors.setup(context => new NotifierActor(context, notifier))
