@@ -1,11 +1,11 @@
 package actors
 
 import actors.PersistentIotDevice.Response._
-import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.{ ActorRef, Behavior }
 import akka.persistence.typed.PersistenceId
-import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
+import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 
-import scala.util.{Success, Try}
+import scala.util.{ Success, Try }
 
 // TODO inject a notification service for command handler to contact upon alerting
 object PersistentIotDevice {
@@ -17,7 +17,8 @@ object PersistentIotDevice {
 
     case class DisableDevice(replyTo: ActorRef[Response]) extends Command
 
-    case class AlertDevice(message: String, replyTo: ActorRef[Response]) extends Command
+    case class AlertDevice(message: String, replyTo: ActorRef[Response])
+        extends Command
 
     case class StopAlert(replyTo: ActorRef[Response]) extends Command
 
@@ -43,13 +44,16 @@ object PersistentIotDevice {
     // TODO coalesce these responses, lots of repeating
     case class DeviceAlertedResponse(maybeDevice: Try[Device]) extends Response
 
-    case class DeviceStopAlertResponse(maybeDevice: Try[Device]) extends Response
+    case class DeviceStopAlertResponse(maybeDevice: Try[Device])
+        extends Response
 
-    case class DeviceStateUpdatedResponse(maybeDevice: Try[Device]) extends Response
+    case class DeviceStateUpdatedResponse(maybeDevice: Try[Device])
+        extends Response
 
     case class DeviceDisabledResponse(maybeDevice: Try[Device]) extends Response
 
-    case class GetDeviceStateResponse(maybeDevice: Option[State]) extends Response
+    case class GetDeviceStateResponse(maybeDevice: Option[State])
+        extends Response
   }
 
   sealed trait State
@@ -74,7 +78,9 @@ object PersistentIotDevice {
                 .persist(DeviceInitialized())
                 .thenReply(replyTo)(_ => DeviceInitializedResponse())
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(GetDeviceStateResponse(Some(Inactive(device))))
+              Effect.reply(replyTo)(
+                GetDeviceStateResponse(Some(Inactive(device)))
+              )
             case _ => Effect.none
           }
         case Monitoring(device) =>
@@ -82,13 +88,21 @@ object PersistentIotDevice {
             case AlertDevice(message, replyTo) =>
               Effect
                 .persist(DeviceAlerted(message))
-                .thenReply(replyTo)(_ => DeviceAlertedResponse(Success(device.copy(stateMsg = Some(message)))))
+                .thenReply(replyTo)(_ =>
+                  DeviceAlertedResponse(
+                    Success(device.copy(stateMsg = Some(message)))
+                  )
+                )
             case DisableDevice(replyTo) =>
               Effect
                 .persist(DeviceDisabled())
-                .thenReply(replyTo)(_ => DeviceDisabledResponse(Success(device)))
+                .thenReply(replyTo)(_ =>
+                  DeviceDisabledResponse(Success(device))
+                )
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(GetDeviceStateResponse(Some(Monitoring(device))))
+              Effect.reply(replyTo)(
+                GetDeviceStateResponse(Some(Monitoring(device)))
+              )
             case _ => Effect.none
           }
         case Alerting(device) =>
@@ -96,9 +110,13 @@ object PersistentIotDevice {
             case StopAlert(replyTo) =>
               Effect
                 .persist(DeviceAlertStopped())
-                .thenReply(replyTo)(_ => DeviceStopAlertResponse(Success(device.copy(stateMsg = None))))
+                .thenReply(replyTo)(_ =>
+                  DeviceStopAlertResponse(Success(device.copy(stateMsg = None)))
+                )
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(GetDeviceStateResponse(Some(Alerting(device))))
+              Effect.reply(replyTo)(
+                GetDeviceStateResponse(Some(Alerting(device)))
+              )
             case _ => Effect.none
           }
       }
@@ -107,19 +125,24 @@ object PersistentIotDevice {
   val eventHandler: (State, Event) => State =
     (state, event) =>
       state match {
-        case inactive@Inactive(device) => event match {
-          case DeviceInitialized() => Monitoring(device)
-          case _ => inactive
-        }
-        case monitoring@Monitoring(device) => event match {
-          case DeviceAlerted(message) => Alerting(device.copy(stateMsg = Some(message)))
-          case DeviceDisabled() => Inactive(device)
-          case _ => monitoring
-        }
-        case alerting@Alerting(device) => event match {
-          case DeviceAlertStopped() => Monitoring(device.copy(stateMsg = None))
-          case _ => alerting
-        }
+        case inactive @ Inactive(device) =>
+          event match {
+            case DeviceInitialized() => Monitoring(device)
+            case _                   => inactive
+          }
+        case monitoring @ Monitoring(device) =>
+          event match {
+            case DeviceAlerted(message) =>
+              Alerting(device.copy(stateMsg = Some(message)))
+            case DeviceDisabled() => Inactive(device)
+            case _                => monitoring
+          }
+        case alerting @ Alerting(device) =>
+          event match {
+            case DeviceAlertStopped() =>
+              Monitoring(device.copy(stateMsg = None))
+            case _ => alerting
+          }
       }
 
   def apply(id: String, name: String): Behavior[Command] =
