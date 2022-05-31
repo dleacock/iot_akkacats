@@ -17,7 +17,7 @@ object NotifierActor {
 
   case class Notify(replyTo: ActorRef[NotifierResponse]) extends NotifierMessage
 
-  //TODO Wrap response in Try?Option?Either?
+  // TODO Wrap response in Try?Option?Either?
   case class NotifierResponse(response: String) extends NotifierMessage
 }
 
@@ -25,16 +25,11 @@ class NotifierActor(
   context: ActorContext[NotifierMessage],
   notifier: Notifier[Done])
     extends AbstractBehavior[NotifierMessage](context) {
-  self =>
+  selfBehavior =>
 
   import NotifierActor._
 
   override def onMessage(msg: NotifierMessage): Behavior[NotifierMessage] = {
-    case class WrappedNotifyResponse(
-      notifierResponse: NotifierResponse,
-      replyTo: ActorRef[NotifierResponse])
-        extends NotifierMessage
-
     msg match {
       case Notify(replyTo) => {
         context.pipeToSelf(notifier.sendNotification) {
@@ -42,19 +37,26 @@ class NotifierActor(
             WrappedNotifyResponse(NotifierResponse("done"), replyTo)
           case Failure(exception) =>
             WrappedNotifyResponse(
-              NotifierResponse(s"${exception.getMessage}"), // TODO improve this (Either?)
+              NotifierResponse(
+                s"${exception.getMessage}"
+              ), // TODO improve this (Either?)
               replyTo
             )
         }
-        self
+        selfBehavior
       }
       case WrappedNotifyResponse(notifierResponse, replyTo) =>
         replyTo ! notifierResponse
-        self
+        selfBehavior
       case _ => {
         context.log.info("Unknown message.")
-        self
+        selfBehavior
       }
     }
+
+    case class WrappedNotifyResponse(
+      notifierResponse: NotifierResponse,
+      replyTo: ActorRef[NotifierResponse])
+        extends NotifierMessage
   }
 }
