@@ -9,7 +9,6 @@ import notifier.Notifier
 import scala.util.{ Failure, Success }
 
 // TODO create tests
-
 object NotifierActor {
   def apply(notifier: Notifier[Done]): Behavior[NotifierMessage] =
     Behaviors.setup(context => new NotifierActor(context, notifier))
@@ -18,6 +17,7 @@ object NotifierActor {
 
   case class Notify(replyTo: ActorRef[NotifierResponse]) extends NotifierMessage
 
+  //TODO Wrap response in Try?Option?Either?
   case class NotifierResponse(response: String) extends NotifierMessage
 }
 
@@ -29,10 +29,6 @@ class NotifierActor(
 
   import NotifierActor._
 
-  context
-    .log
-    .info(s"Creating Notifier using ${notifier.getType} implementation")
-
   override def onMessage(msg: NotifierMessage): Behavior[NotifierMessage] = {
     case class WrappedNotifyResponse(
       notifierResponse: NotifierResponse,
@@ -42,11 +38,11 @@ class NotifierActor(
     msg match {
       case Notify(replyTo) => {
         context.pipeToSelf(notifier.sendNotification) {
-          case Success(_) =>
+          case Success(_) => // TODO fix return payload
             WrappedNotifyResponse(NotifierResponse("done"), replyTo)
           case Failure(exception) =>
             WrappedNotifyResponse(
-              NotifierResponse(s"${exception.getMessage}"),
+              NotifierResponse(s"${exception.getMessage}"), // TODO improve this (Either?)
               replyTo
             )
         }

@@ -2,7 +2,6 @@ package actors
 
 import akka.Done
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import akka.actor.typed.ActorRef
 import notifier.Notifier
 import org.scalatest.wordspec.AnyWordSpecLike
 
@@ -26,8 +25,9 @@ class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
   }
 
   "NotifierActor" must {
+    val probe = createTestProbe[NotifierMessage]()
+
     "do the thing" in {
-      val probe = createTestProbe[NotifierMessage]()
       val notifierActor = spawn(NotifierActor(dummyNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
@@ -40,7 +40,6 @@ class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
     }
 
     "cant do the thing" in {
-      val probe = createTestProbe[NotifierMessage]()
       val notifierActor = spawn(NotifierActor(badNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
