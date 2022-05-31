@@ -8,20 +8,18 @@ import notifier.Notifier
 
 import scala.util.{ Failure, Success }
 
-// TODO create tests
 object NotifierActor {
   def apply(notifier: Notifier[Done]): Behavior[NotifierMessage] =
     Behaviors.setup(context => new NotifierActor(context, notifier))
+  type NotifierFailed = String
 
   sealed trait NotifierMessage
 
-  case class Notify(replyTo: ActorRef[NotifierResponse]) extends NotifierMessage
-
-  // TODO Wrap response in Try?Option?Either?
-  case class NotifierResponse(response: String) extends NotifierMessage
+  case class Notify(replyTo: ActorRef[Either[NotifierFailed, Done]])
+      extends NotifierMessage
 }
 
-class NotifierActor(
+class NotifierActor[T](
   context: ActorContext[NotifierMessage],
   notifier: Notifier[Done])
     extends AbstractBehavior[NotifierMessage](context) {
@@ -31,29 +29,22 @@ class NotifierActor(
 
   override def onMessage(msg: NotifierMessage): Behavior[NotifierMessage] = {
     case class WrappedNotifyResponse(
-      notifierResponse: NotifierResponse,
-      replyTo: ActorRef[NotifierResponse])
+      notifierResponse: Either[NotifierFailed, Done],
+      replyTo: ActorRef[Either[NotifierFailed, Done]])
         extends NotifierMessage
 
     msg match {
       case Notify(replyTo) => {
         context.pipeToSelf(notifier.sendNotification) {
-          case Success(_) => // TODO fix return payload
-            WrappedNotifyResponse(NotifierResponse("done"), replyTo)
+          case Success(done) =>
+            WrappedNotifyResponse(Right(done), replyTo)
           case Failure(exception) =>
-            WrappedNotifyResponse(
-              NotifierResponse(
-                s"${exception.getMessage}"
-              ), // TODO improve this (Either?)
-              replyTo
-            )
+            WrappedNotifyResponse(Left(exception.getMessage), replyTo)
         }
       }
       case WrappedNotifyResponse(notifierResponse, replyTo) =>
         replyTo ! notifierResponse
-      case _ => {
-        context.log.info("Unknown message.")
-      }
+      case _ => context.log.error("Unknown message.")
     }
 
     selfBehavior

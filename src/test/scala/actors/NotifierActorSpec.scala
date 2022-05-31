@@ -12,35 +12,38 @@ class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
   import NotifierMocks._
 
   "NotifierActor" must {
-    val probe = createTestProbe[NotifierMessage]()
+    val probe = createTestProbe[Either[String, Done]]()
 
-    "do the thing" in {
+    "successfully call notifier and return positive result" in {
       val notifierActor = spawn(NotifierActor(mockSuccessNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
-      val response: NotifierMessage = probe.receiveMessage()
-      val str = response match {
-        case NotifierResponse(response) => response
-        case _                          => "unmatched"
+      val response = probe.receiveMessage()
+      val responsePayload = response match {
+        case Left(notifierFailed)    => notifierFailed
+        case Right(done) => done
       }
-      str shouldBe "done"
+
+      responsePayload shouldBe Done
     }
 
-    "cant do the thing" in {
+    "fail to call notifier and return exception message" in {
       val notifierActor = spawn(NotifierActor(mockFailureNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
-      val response: NotifierMessage = probe.receiveMessage()
-      val str = response match {
-        case NotifierResponse(response) => response
-        case _                          => "unmatched"
+      val response = probe.receiveMessage()
+      val responsePayload = response match {
+        case Left(notifierFailed)    => notifierFailed
+        case Right(done) => done
       }
-      str shouldBe "problem"
+      responsePayload shouldBe exceptionMessage
     }
   }
 }
 
 object NotifierMocks {
+  val exceptionMessage = "problem"
+
   val mockSuccessNotifier: Notifier[Done] = new Notifier[Done] {
     override def sendNotification: Future[Done] = Future.successful(Done)
 
@@ -49,7 +52,7 @@ object NotifierMocks {
 
   val mockFailureNotifier: Notifier[Done] = new Notifier[Done] {
     override def sendNotification: Future[Done] =
-      Future.failed(new RuntimeException("problem"))
+      Future.failed(new RuntimeException(exceptionMessage))
 
     override def getType: String = "bad"
   }
