@@ -8,7 +8,7 @@ import notifier.Notifier
 
 import scala.util.{ Failure, Success }
 
-object NotifierActor {
+object NotifierActor { // TODO repace with Future in notifier return type
   def apply(notifier: Notifier[Done]): Behavior[NotifierMessage] =
     Behaviors.setup(context => new NotifierActor(context, notifier))
   type NotifierFailed = String
@@ -18,6 +18,8 @@ object NotifierActor {
   case class Notify(replyTo: ActorRef[Either[NotifierFailed, Done]])
       extends NotifierMessage
 }
+
+// TODO Replace with Futures
 
 class NotifierActor[T](
   context: ActorContext[NotifierMessage],

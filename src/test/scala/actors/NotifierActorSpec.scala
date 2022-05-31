@@ -12,9 +12,9 @@ class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
   import NotifierMocks._
 
   "NotifierActor" must {
-    val probe = createTestProbe[Either[String, Done]]()
+    val probe = createTestProbe[Either[NotifierFailed, Done]]()
 
-    "successfully call notifier and return positive result" in {
+    "successfully call notifier and return Done result" in {
       val notifierActor = spawn(NotifierActor(mockSuccessNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
