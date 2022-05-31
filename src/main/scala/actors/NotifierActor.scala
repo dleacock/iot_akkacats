@@ -48,15 +48,14 @@ class NotifierActor(
               replyTo
             )
         }
-        selfBehavior
       }
       case WrappedNotifyResponse(notifierResponse, replyTo) =>
         replyTo ! notifierResponse
-        selfBehavior
       case _ => {
         context.log.info("Unknown message.")
-        selfBehavior
       }
     }
+
+    selfBehavior
   }
 }
