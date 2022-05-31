@@ -30,6 +30,11 @@ class NotifierActor(
   import NotifierActor._
 
   override def onMessage(msg: NotifierMessage): Behavior[NotifierMessage] = {
+    case class WrappedNotifyResponse(
+      notifierResponse: NotifierResponse,
+      replyTo: ActorRef[NotifierResponse])
+        extends NotifierMessage
+
     msg match {
       case Notify(replyTo) => {
         context.pipeToSelf(notifier.sendNotification) {
@@ -53,10 +58,5 @@ class NotifierActor(
         selfBehavior
       }
     }
-
-    case class WrappedNotifyResponse(
-      notifierResponse: NotifierResponse,
-      replyTo: ActorRef[NotifierResponse])
-        extends NotifierMessage
   }
 }
