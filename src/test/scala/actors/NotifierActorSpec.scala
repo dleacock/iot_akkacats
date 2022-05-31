@@ -7,10 +7,8 @@ import notifier.Notifier
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.Future
-
-class NotifierActorSpec
-    extends ScalaTestWithActorTestKit
-    with AnyWordSpecLike {
+// TODO clean up, improve  tests
+class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
 
   import NotifierActor._
 
@@ -18,6 +16,13 @@ class NotifierActorSpec
     override def sendNotification: Future[Done] = Future.successful(Done)
 
     override def getType: String = "dummy"
+  }
+
+  val badNotifier: Notifier[Done] = new Notifier[Done] {
+    override def sendNotification: Future[Done] =
+      Future.failed(new RuntimeException("problem"))
+
+    override def getType: String = "bad"
   }
 
   "NotifierActor" must {
@@ -29,9 +34,22 @@ class NotifierActorSpec
       val response: NotifierMessage = probe.receiveMessage()
       val str = response match {
         case NotifierResponse(response) => response
+        case _                          => "unmatched"
       }
       str shouldBe "done"
+    }
 
+    "cant do the thing" in {
+      val probe = createTestProbe[NotifierMessage]()
+      val notifierActor = spawn(NotifierActor(badNotifier))
+
+      notifierActor ! NotifierActor.Notify(probe.ref)
+      val response: NotifierMessage = probe.receiveMessage()
+      val str = response match {
+        case NotifierResponse(response) => response
+        case _                          => "unmatched"
+      }
+      str shouldBe "problem"
     }
   }
 }
