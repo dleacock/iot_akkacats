@@ -8,18 +8,18 @@ import notifier.Notifier
 
 import scala.util.{ Failure, Success }
 
-object NotifierActor { // TODO repace with Future in notifier return type
+object NotifierActor {
   def apply(notifier: Notifier[Done]): Behavior[NotifierMessage] =
     Behaviors.setup(context => new NotifierActor(context, notifier))
-  type NotifierFailed = String
-
   sealed trait NotifierMessage
 
-  case class Notify(replyTo: ActorRef[Either[NotifierFailed, Done]])
-      extends NotifierMessage
-}
+  case class Notify(replyTo: ActorRef[NotifierReply]) extends NotifierMessage
 
-// TODO Replace with Futures
+  sealed trait NotifierReply
+
+  object NotifySuccess extends NotifierReply
+  case class NotifyFailed(reason: String) extends NotifierReply
+}
 
 class NotifierActor[T](
   context: ActorContext[NotifierMessage],
@@ -31,17 +31,17 @@ class NotifierActor[T](
 
   override def onMessage(msg: NotifierMessage): Behavior[NotifierMessage] = {
     case class WrappedNotifyResponse(
-      notifierResponse: Either[NotifierFailed, Done],
-      replyTo: ActorRef[Either[NotifierFailed, Done]])
+      notifierResponse: NotifierReply,
+      replyTo: ActorRef[NotifierReply])
         extends NotifierMessage
 
     msg match {
       case Notify(replyTo) => {
         context.pipeToSelf(notifier.sendNotification) {
-          case Success(done) =>
-            WrappedNotifyResponse(Right(done), replyTo)
+          case Success(_) =>
+            WrappedNotifyResponse(NotifySuccess, replyTo)
           case Failure(exception) =>
-            WrappedNotifyResponse(Left(exception.getMessage), replyTo)
+            WrappedNotifyResponse(NotifyFailed(exception.getMessage), replyTo)
         }
       }
       case WrappedNotifyResponse(notifierResponse, replyTo) =>

@@ -6,25 +6,25 @@ import notifier.Notifier
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import scala.concurrent.Future
-// TODO clean up, improve  tests
+
 class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
   import NotifierActor._
   import NotifierMocks._
 
   "NotifierActor" must {
-    val probe = createTestProbe[Either[NotifierFailed, Done]]()
+    val probe = createTestProbe[NotifierReply]()
 
-    "successfully call notifier and return Done result" in {
+    "successfully call notifier and return NotifySuccess result" in {
       val notifierActor = spawn(NotifierActor(mockSuccessNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
       val response = probe.receiveMessage()
       val responsePayload = response match {
-        case Left(notifierFailed)    => notifierFailed
-        case Right(done) => done
+        case NotifySuccess        => NotifySuccess
+        case NotifyFailed(reason) => reason
       }
 
-      responsePayload shouldBe Done
+      responsePayload shouldBe NotifySuccess
     }
 
     "fail to call notifier and return exception message" in {
@@ -33,8 +33,8 @@ class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
       notifierActor ! NotifierActor.Notify(probe.ref)
       val response = probe.receiveMessage()
       val responsePayload = response match {
-        case Left(notifierFailed)    => notifierFailed
-        case Right(done) => done
+        case NotifySuccess        => NotifySuccess
+        case NotifyFailed(reason) => reason
       }
       responsePayload shouldBe exceptionMessage
     }
