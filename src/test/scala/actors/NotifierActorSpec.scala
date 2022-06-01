@@ -18,25 +18,25 @@ class NotifierActorSpec extends ScalaTestWithActorTestKit with AnyWordSpecLike {
       val notifierActor = spawn(NotifierActor(mockSuccessNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
-      val response = probe.receiveMessage()
-      val responsePayload = response match {
+      val notifierReply = probe.receiveMessage()
+      val replyPayload = notifierReply match {
         case NotifySuccess        => NotifySuccess
         case NotifyFailed(reason) => reason
       }
 
-      responsePayload shouldBe NotifySuccess
+      replyPayload shouldBe NotifySuccess
     }
 
     "fail to call notifier and return exception message" in {
       val notifierActor = spawn(NotifierActor(mockFailureNotifier))
 
       notifierActor ! NotifierActor.Notify(probe.ref)
-      val response = probe.receiveMessage()
-      val responsePayload = response match {
+      val notifierReply = probe.receiveMessage()
+      val replyPayload = notifierReply match {
         case NotifySuccess        => NotifySuccess
         case NotifyFailed(reason) => reason
       }
-      responsePayload shouldBe exceptionMessage
+      replyPayload shouldBe exceptionMessage
     }
   }
 }

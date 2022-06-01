@@ -30,7 +30,7 @@ class NotifierActor[T](
   import NotifierActor._
 
   override def onMessage(msg: NotifierMessage): Behavior[NotifierMessage] = {
-    case class WrappedNotifyResponse(
+    case class WrappedNotifierReply(
       notifierResponse: NotifierReply,
       replyTo: ActorRef[NotifierReply])
         extends NotifierMessage
@@ -39,12 +39,12 @@ class NotifierActor[T](
       case Notify(replyTo) => {
         context.pipeToSelf(notifier.sendNotification) {
           case Success(_) =>
-            WrappedNotifyResponse(NotifySuccess, replyTo)
+            WrappedNotifierReply(NotifySuccess, replyTo)
           case Failure(exception) =>
-            WrappedNotifyResponse(NotifyFailed(exception.getMessage), replyTo)
+            WrappedNotifierReply(NotifyFailed(exception.getMessage), replyTo)
         }
       }
-      case WrappedNotifyResponse(notifierResponse, replyTo) =>
+      case WrappedNotifierReply(notifierResponse, replyTo) =>
         replyTo ! notifierResponse
       case _ => context.log.error("Unknown message.")
     }
