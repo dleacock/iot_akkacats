@@ -1,8 +1,8 @@
 package actors
 
-import actors.PersistentIotDevice.Command._
-import actors.PersistentIotDevice.Response._
-import actors.PersistentIotDevice._
+import actors.PersistentDevice.Command._
+import actors.PersistentDevice.Response._
+import actors.PersistentDevice._
 import akka.actor.testkit.typed.scaladsl.{
   LogCapturing,
   ScalaTestWithActorTestKit
@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Success
 
-class PersistentIotDeviceSpec
+class PersistentDeviceSpec
     extends ScalaTestWithActorTestKit(
       ConfigFactory
         .parseString("akka.actor.allow-java-serialization = on")
@@ -35,7 +35,7 @@ class PersistentIotDeviceSpec
     : EventSourcedBehaviorTestKit[Command, Event, State] =
     EventSourcedBehaviorTestKit[Command, Event, State](
       system,
-      PersistentIotDevice(id, name)
+      PersistentDevice(id, name)
     )
 
   override protected def beforeEach(): Unit = {

@@ -1,6 +1,6 @@
 package actors
 
-import actors.PersistentIotDevice.Response._
+import actors.PersistentDevice.Response._
 import akka.actor.typed.{ ActorRef, Behavior }
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
@@ -8,7 +8,7 @@ import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 import scala.util.{ Success, Try }
 
 // TODO inject a notification service for command handler to contact upon alerting
-object PersistentIotDevice {
+object PersistentDevice {
 
   sealed trait Command
 
