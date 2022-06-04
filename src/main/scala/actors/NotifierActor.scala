@@ -21,7 +21,7 @@ object NotifierActor {
   case class NotifyFailed(reason: String) extends NotifierReply
 }
 
-class NotifierActor[T](
+class NotifierActor(
   context: ActorContext[NotifierMessage],
   notifier: Notifier[Done])
     extends AbstractBehavior[NotifierMessage](context) {
