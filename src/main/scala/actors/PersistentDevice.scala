@@ -1,11 +1,12 @@
 package actors
 
 import actors.PersistentDevice.Response._
-import akka.actor.typed.{ ActorRef, Behavior }
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import akka.persistence.typed.PersistenceId
-import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
+import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
 
-import scala.util.{ Success, Try }
+import scala.util.{Success, Try}
 
 object PersistentDevice {
 
@@ -132,6 +133,9 @@ object PersistentDevice {
             case _ => alerting
           }
       }
+
+  val TypeKey: EntityTypeKey[Command] =
+    EntityTypeKey[Command]("PersistentDevice")
 
   def apply(id: String, name: String): Behavior[Command] =
     EventSourcedBehavior[Command, Event, State](

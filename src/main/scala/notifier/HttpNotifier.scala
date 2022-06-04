@@ -35,16 +35,14 @@ class HttpNotifier(
         }
         case _ => {
           logger.info("NO IDEA")
-          Future.successful(Done)
+          Future.failed(new RuntimeException("not sure but its bad"))
         }
       }
       .recoverWith { ex =>
         logger.info("WTF")
         Future.failed(new RuntimeException("bad stuff"))
-
       }
   }
 
   override def getType: String = "HttpNotifier"
-
 }
