@@ -29,7 +29,7 @@ class PersistentDeviceSpec
 
   private val id: String = UUID.randomUUID().toString
   private val name: String = "test_device"
-  private val probeWaitDuration = FiniteDuration(500, TimeUnit.MILLISECONDS)
+  private val probeWaitDuration = FiniteDuration(250, TimeUnit.MILLISECONDS)
 
   private val eventSourcedTestKit
     : EventSourcedBehaviorTestKit[Command, Event, State] =
@@ -69,7 +69,7 @@ class PersistentDeviceSpec
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
         InitializeDevice(replyTo)
       )
-      result.reply shouldBe DeviceInitializedResponse()
+      result.reply shouldBe DeviceResponse(Success(device))
       result.stateOfType[Monitoring].device shouldBe device
     }
 
@@ -81,7 +81,7 @@ class PersistentDeviceSpec
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
-      result.reply shouldBe DeviceAlertedResponse(Success(alertedDevice))
+      result.reply shouldBe DeviceResponse(Success(alertedDevice))
       result.stateOfType[Alerting].device shouldBe alertedDevice
     }
 
@@ -112,7 +112,7 @@ class PersistentDeviceSpec
 
       val result =
         eventSourcedTestKit.runCommand[Response](replyTo => StopAlert(replyTo))
-      result.reply shouldBe DeviceStopAlertResponse(Success(device))
+      result.reply shouldBe DeviceResponse(Success(device))
       result.stateOfType[Monitoring].device shouldBe device
     }
 

@@ -7,7 +7,6 @@ import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 
 import scala.util.{ Success, Try }
 
-// TODO inject a notification service for command handler to contact upon alerting
 object PersistentDevice {
 
   sealed trait Command
@@ -25,6 +24,15 @@ object PersistentDevice {
     case class GetDeviceState(replyTo: ActorRef[Response]) extends Command
   }
 
+  sealed trait Response
+
+  object Response {
+    case class DeviceResponse(maybeDevice: Try[Device]) extends Response
+
+    case class GetDeviceStateResponse(maybeDevice: Option[State])
+      extends Response
+  }
+
   sealed trait Event
 
   case class DeviceInitialized() extends Event
@@ -35,26 +43,6 @@ object PersistentDevice {
 
   case class DeviceDisabled() extends Event
 
-  sealed trait Response
-
-  object Response {
-    case class DeviceInitializedResponse() extends Response
-
-    // TODO Either?
-    // TODO coalesce these responses, lots of repeating
-    case class DeviceAlertedResponse(maybeDevice: Try[Device]) extends Response
-
-    case class DeviceStopAlertResponse(maybeDevice: Try[Device])
-        extends Response
-
-    case class DeviceStateUpdatedResponse(maybeDevice: Try[Device])
-        extends Response
-
-    case class DeviceDisabledResponse(maybeDevice: Try[Device]) extends Response
-
-    case class GetDeviceStateResponse(maybeDevice: Option[State])
-        extends Response
-  }
 
   sealed trait State
 
@@ -76,7 +64,7 @@ object PersistentDevice {
             case InitializeDevice(replyTo) =>
               Effect
                 .persist(DeviceInitialized())
-                .thenReply(replyTo)(_ => DeviceInitializedResponse())
+                .thenReply(replyTo)(_ => DeviceResponse(Success(device)))
             case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(
                 GetDeviceStateResponse(Some(Inactive(device)))
@@ -89,7 +77,7 @@ object PersistentDevice {
               Effect
                 .persist(DeviceAlerted(message))
                 .thenReply(replyTo)(_ =>
-                  DeviceAlertedResponse(
+                  DeviceResponse(
                     Success(device.copy(stateMsg = Some(message)))
                   )
                 )
@@ -97,7 +85,7 @@ object PersistentDevice {
               Effect
                 .persist(DeviceDisabled())
                 .thenReply(replyTo)(_ =>
-                  DeviceDisabledResponse(Success(device))
+                  DeviceResponse(Success(device))
                 )
             case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(
@@ -111,7 +99,7 @@ object PersistentDevice {
               Effect
                 .persist(DeviceAlertStopped())
                 .thenReply(replyTo)(_ =>
-                  DeviceStopAlertResponse(Success(device.copy(stateMsg = None)))
+                  DeviceResponse(Success(device.copy(stateMsg = None)))
                 )
             case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(
