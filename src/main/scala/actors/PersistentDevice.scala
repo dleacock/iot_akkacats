@@ -53,7 +53,7 @@ object PersistentDevice {
 
   case class Alerting(device: Device) extends State
 
-  case class Device(id: String, name: String, stateMsg: Option[String])
+  case class Device(id: String, stateMsg: Option[String])
 
   import Command._
 
@@ -137,10 +137,10 @@ object PersistentDevice {
   val TypeKey: EntityTypeKey[Command] =
     EntityTypeKey[Command]("PersistentDevice")
 
-  def apply(id: String, name: String): Behavior[Command] =
+  def apply(persistenceId: PersistenceId): Behavior[Command] =
     EventSourcedBehavior[Command, Event, State](
-      persistenceId = PersistenceId.ofUniqueId(id),
-      emptyState = Inactive(Device(id, name, None)),
+      persistenceId = persistenceId,
+      emptyState = Inactive(Device(persistenceId.id, None)),
       commandHandler = commandHandler,
       eventHandler = eventHandler
     )
