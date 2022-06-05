@@ -3,11 +3,9 @@ package actors
 import actors.PersistentDevice.Command._
 import actors.PersistentDevice.Response._
 import actors.PersistentDevice._
-import akka.actor.testkit.typed.scaladsl.{
-  LogCapturing,
-  ScalaTestWithActorTestKit
-}
+import akka.actor.testkit.typed.scaladsl.{LogCapturing, ScalaTestWithActorTestKit}
 import akka.persistence.testkit.scaladsl.EventSourcedBehaviorTestKit
+import akka.persistence.typed.PersistenceId
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.wordspec.AnyWordSpecLike
@@ -28,14 +26,13 @@ class PersistentDeviceSpec
     with LogCapturing {
 
   private val id: String = UUID.randomUUID().toString
-  private val name: String = "test_device"
   private val probeWaitDuration = FiniteDuration(250, TimeUnit.MILLISECONDS)
 
   private val eventSourcedTestKit
     : EventSourcedBehaviorTestKit[Command, Event, State] =
     EventSourcedBehaviorTestKit[Command, Event, State](
       system,
-      PersistentDevice(id, name)
+      PersistentDevice(PersistenceId.ofUniqueId(id))
     )
 
   override protected def beforeEach(): Unit = {
@@ -44,9 +41,9 @@ class PersistentDeviceSpec
   }
 
   "A Device" must {
-    val device = Device(id, name, None)
+    val device = Device(id, None)
     val alertMessage = "alert_message"
-    val alertedDevice = Device(id, name, Some(alertMessage))
+    val alertedDevice = Device(id, Some(alertMessage))
 
     "be created in inactive state" in {
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
