@@ -66,7 +66,7 @@ class ClusterSystem_1(port: Int) extends App {
   val sharding: ClusterSharding = ClusterSharding(system)
 
   sharding.init(Entity(Counter.TypeKey) { entityContext =>
-    Counter(entityContext.entityId)
+    Counter(entityContext.entityId, 0)
   })
 
   private val counter1Ref: EntityRef[Counter.Command] =
@@ -103,7 +103,7 @@ class ClusterSystem_2(port: Int) extends App {
   val sharding: ClusterSharding = ClusterSharding(system)
 
   sharding.init(Entity(Counter.TypeKey) { entityContext =>
-    Counter(entityContext.entityId)
+    Counter(entityContext.entityId, 0)
   })
 
   private val counter1Ref: EntityRef[Counter.Command] =
