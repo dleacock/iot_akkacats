@@ -15,7 +15,7 @@ object EchoActor {
   case class EchoedWords(words: Set[String]) {
     def add(word: String): EchoedWords = copy(words = words + word)
 
-    def numberOfEchos: Int = words.size
+    def totalEchos: Int = words.size
   }
 
   private val commandHandler: (EchoedWords, Command) => Effect[Echoed, EchoedWords] = {
@@ -23,7 +23,7 @@ object EchoActor {
       command match {
         case echo @ Echo(word) =>
           Effect.persist(Echoed(word))
-          .thenRun(state => echo.replyTo ! Echoing(echo.word, state.numberOfEchos))
+          .thenRun(state => echo.replyTo ! Echoing(echo.word, state.totalEchos))
       }
   }
 
