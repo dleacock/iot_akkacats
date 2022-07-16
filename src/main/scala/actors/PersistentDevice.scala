@@ -1,26 +1,29 @@
 package actors
 
 import actors.PersistentDevice.Response._
-import akka.actor.typed.{ActorRef, Behavior}
-import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
+import akka.Done
+import akka.actor.typed.{ ActorRef, ActorSystem, Behavior }
+import akka.cluster.sharding.typed.scaladsl.{
+  ClusterSharding,
+  Entity,
+  EntityTypeKey
+}
 import akka.persistence.typed.PersistenceId
-import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior}
-
-import scala.util.{Success, Try}
+import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 
 object PersistentDevice {
 
   sealed trait Command
 
   object Command {
-    case class InitializeDevice(replyTo: ActorRef[Response]) extends Command
+    case class InitializeDevice(replyTo: ActorRef[Done]) extends Command
 
-    case class DisableDevice(replyTo: ActorRef[Response]) extends Command
+    case class DisableDevice(replyTo: ActorRef[Done]) extends Command
 
-    case class AlertDevice(message: String, replyTo: ActorRef[Response])
+    case class AlertDevice(message: String, replyTo: ActorRef[Done])
         extends Command
 
-    case class StopAlert(replyTo: ActorRef[Response]) extends Command
+    case class StopAlert(replyTo: ActorRef[Done]) extends Command
 
     case class GetDeviceState(replyTo: ActorRef[Response]) extends Command
   }
@@ -28,10 +31,8 @@ object PersistentDevice {
   sealed trait Response
 
   object Response {
-    case class DeviceResponse(maybeDevice: Try[Device]) extends Response
-
-    case class GetDeviceStateResponse(maybeDevice: Option[State])
-      extends Response
+    case class DeviceResponse(device: Device, state: String) extends Response
+    case class FailureResponse(message: String) extends Response
   }
 
   sealed trait Event
@@ -44,7 +45,6 @@ object PersistentDevice {
 
   case class DeviceDisabled() extends Event
 
-
   sealed trait State
 
   case class Inactive(device: Device) extends State
@@ -53,7 +53,7 @@ object PersistentDevice {
 
   case class Alerting(device: Device) extends State
 
-  case class Device(id: String, stateMsg: Option[String])
+  case class Device(id: String, maybeMessage: Option[String])
 
   import Command._
 
@@ -65,11 +65,9 @@ object PersistentDevice {
             case InitializeDevice(replyTo) =>
               Effect
                 .persist(DeviceInitialized())
-                .thenReply(replyTo)(_ => DeviceResponse(Success(device)))
+                .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(
-                GetDeviceStateResponse(Some(Inactive(device)))
-              )
+              Effect.reply(replyTo)(DeviceResponse(device, "Inactive"))
             case _ => Effect.none
           }
         case Monitoring(device) =>
@@ -77,21 +75,13 @@ object PersistentDevice {
             case AlertDevice(message, replyTo) =>
               Effect
                 .persist(DeviceAlerted(message))
-                .thenReply(replyTo)(_ =>
-                  DeviceResponse(
-                    Success(device.copy(stateMsg = Some(message)))
-                  )
-                )
+                .thenReply(replyTo)(_ => Done)
             case DisableDevice(replyTo) =>
               Effect
                 .persist(DeviceDisabled())
-                .thenReply(replyTo)(_ =>
-                  DeviceResponse(Success(device))
-                )
+                .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(
-                GetDeviceStateResponse(Some(Monitoring(device)))
-              )
+              Effect.reply(replyTo)(DeviceResponse(device, "Monitoring"))
             case _ => Effect.none
           }
         case Alerting(device) =>
@@ -99,13 +89,9 @@ object PersistentDevice {
             case StopAlert(replyTo) =>
               Effect
                 .persist(DeviceAlertStopped())
-                .thenReply(replyTo)(_ =>
-                  DeviceResponse(Success(device.copy(stateMsg = None)))
-                )
+                .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(
-                GetDeviceStateResponse(Some(Alerting(device)))
-              )
+              Effect.reply(replyTo)(DeviceResponse(device, "Alerting"))
             case _ => Effect.none
           }
       }
@@ -122,14 +108,14 @@ object PersistentDevice {
         case monitoring @ Monitoring(device) =>
           event match {
             case DeviceAlerted(message) =>
-              Alerting(device.copy(stateMsg = Some(message)))
+              Alerting(device.copy(maybeMessage = Some(message)))
             case DeviceDisabled() => Inactive(device)
             case _                => monitoring
           }
         case alerting @ Alerting(device) =>
           event match {
             case DeviceAlertStopped() =>
-              Monitoring(device.copy(stateMsg = None))
+              Monitoring(device.copy(maybeMessage = None))
             case _ => alerting
           }
       }
@@ -137,11 +123,18 @@ object PersistentDevice {
   val TypeKey: EntityTypeKey[Command] =
     EntityTypeKey[Command]("PersistentDevice")
 
-  def apply(persistenceId: PersistenceId): Behavior[Command] =
+  def initSharding(system: ActorSystem[_]): Unit = {
+    ClusterSharding(system).init(Entity(TypeKey) { entityContext =>
+      PersistentDevice(entityContext.entityId)
+    })
+  }
+
+  def apply(deviceId: String): Behavior[Command] = {
     EventSourcedBehavior[Command, Event, State](
-      persistenceId = persistenceId,
-      emptyState = Inactive(Device(persistenceId.id, None)),
+      persistenceId = PersistenceId(EntityTypeKey.toString, deviceId),
+      emptyState = Inactive(Device(deviceId, None)),
       commandHandler = commandHandler,
       eventHandler = eventHandler
     )
+  }
 }
