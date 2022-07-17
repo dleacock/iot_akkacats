@@ -37,25 +37,34 @@ object PersistentDevice {
 
   sealed trait Event
 
-  case class DeviceInitialized() extends Event
+  object Event {
+    case class DeviceInitialized() extends Event
 
-  case class DeviceAlerted(message: String) extends Event
+    case class DeviceAlerted(message: String) extends Event
 
-  case class DeviceAlertStopped() extends Event
+    case class DeviceAlertStopped() extends Event
 
-  case class DeviceDisabled() extends Event
+    case class DeviceDisabled() extends Event
+  }
 
   sealed trait State
 
-  case class Inactive(device: Device) extends State
+  object State {
+    case class Inactive(device: Device) extends State
 
-  case class Monitoring(device: Device) extends State
+    case class Monitoring(device: Device) extends State
 
-  case class Alerting(device: Device) extends State
+    case class Alerting(device: Device) extends State
+
+    val INACTIVE = "Inactive"
+    val MONITORING = "Monitoring"
+    val ALERTING = "Alerting"
+  }
 
   case class Device(id: String, maybeMessage: Option[String])
-
+  import State._
   import Command._
+  import Event._
 
   val commandHandler: (State, Command) => Effect[Event, State] =
     (state, command) => {
@@ -67,7 +76,7 @@ object PersistentDevice {
                 .persist(DeviceInitialized())
                 .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(DeviceResponse(device, "Inactive"))
+              Effect.reply(replyTo)(DeviceResponse(device, INACTIVE))
             case _ => Effect.none
           }
         case Monitoring(device) =>
@@ -81,7 +90,7 @@ object PersistentDevice {
                 .persist(DeviceDisabled())
                 .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(DeviceResponse(device, "Monitoring"))
+              Effect.reply(replyTo)(DeviceResponse(device, MONITORING))
             case _ => Effect.none
           }
         case Alerting(device) =>
@@ -91,7 +100,7 @@ object PersistentDevice {
                 .persist(DeviceAlertStopped())
                 .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
-              Effect.reply(replyTo)(DeviceResponse(device, "Alerting"))
+              Effect.reply(replyTo)(DeviceResponse(device, ALERTING))
             case _ => Effect.none
           }
       }

@@ -2,10 +2,11 @@ package actors
 
 import actors.PersistentDevice.Command._
 import actors.PersistentDevice.Response._
+import actors.PersistentDevice.State._
 import actors.PersistentDevice._
+import akka.Done
 import akka.actor.testkit.typed.scaladsl.{LogCapturing, ScalaTestWithActorTestKit}
 import akka.persistence.testkit.scaladsl.EventSourcedBehaviorTestKit
-import akka.persistence.typed.PersistenceId
 import com.typesafe.config.ConfigFactory
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.wordspec.AnyWordSpecLike
@@ -13,7 +14,6 @@ import org.scalatest.wordspec.AnyWordSpecLike
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Success
 
 class PersistentDeviceSpec
     extends ScalaTestWithActorTestKit(
@@ -32,7 +32,7 @@ class PersistentDeviceSpec
     : EventSourcedBehaviorTestKit[Command, Event, State] =
     EventSourcedBehaviorTestKit[Command, Event, State](
       system,
-      PersistentDevice(PersistenceId.ofUniqueId(id))
+      PersistentDevice(id)
     )
 
   override protected def beforeEach(): Unit = {
@@ -49,12 +49,12 @@ class PersistentDeviceSpec
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
         GetDeviceState(replyTo)
       )
-      result.reply shouldBe GetDeviceStateResponse(Some(Inactive(device)))
+      result.reply shouldBe DeviceResponse(device, INACTIVE)
       result.stateOfType[Inactive].device shouldBe device
     }
 
     "not become in an alerting state without initialization" in {
-      val testProbe = testKit.createTestProbe[Response]("test_probe")
+      val testProbe = testKit.createTestProbe[Done]("test_probe")
       val result =
         eventSourcedTestKit.runCommand(AlertDevice(alertMessage, testProbe.ref))
 
@@ -63,82 +63,66 @@ class PersistentDeviceSpec
     }
 
     "start monitoring once initialized" in {
-      val result = eventSourcedTestKit.runCommand[Response](replyTo =>
+      val result = eventSourcedTestKit.runCommand[Done](replyTo =>
         InitializeDevice(replyTo)
       )
-      result.reply shouldBe DeviceResponse(Success(device))
+      result.reply shouldBe Done
       result.stateOfType[Monitoring].device shouldBe device
     }
 
     "become alerting when device is alerted after being initialized" in {
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        InitializeDevice(replyTo)
-      )
+      eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
 
-      val result = eventSourcedTestKit.runCommand[Response](replyTo =>
+      val result = eventSourcedTestKit.runCommand[Done](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
-      result.reply shouldBe DeviceResponse(Success(alertedDevice))
+      result.reply shouldBe Done
       result.stateOfType[Alerting].device shouldBe alertedDevice
     }
 
     "reply with alert message when queried when device is alerted" in {
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        InitializeDevice(replyTo)
-      )
-      eventSourcedTestKit.runCommand[Response](replyTo =>
+      eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
+      eventSourcedTestKit.runCommand[Done](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
         GetDeviceState(replyTo)
       )
 
-      result.reply shouldBe GetDeviceStateResponse(
-        Some(Alerting(alertedDevice))
-      )
+      result.reply shouldBe DeviceResponse(alertedDevice, ALERTING)
       result.stateOfType[Alerting].device shouldBe alertedDevice
     }
 
     "stop alerting and go back to monitoring" in {
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        InitializeDevice(replyTo)
-      )
-      eventSourcedTestKit.runCommand[Response](replyTo =>
+      eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
+      eventSourcedTestKit.runCommand[Done](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
 
       val result =
-        eventSourcedTestKit.runCommand[Response](replyTo => StopAlert(replyTo))
-      result.reply shouldBe DeviceResponse(Success(device))
+        eventSourcedTestKit.runCommand[Done](replyTo => StopAlert(replyTo))
+      result.reply shouldBe Done
       result.stateOfType[Monitoring].device shouldBe device
     }
 
     "reply with no message when queried when device is back to monitor after alerted" in {
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        InitializeDevice(replyTo)
-      )
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        AlertDevice(alertMessage, replyTo)
-      )
-      eventSourcedTestKit.runCommand[Response](replyTo => StopAlert(replyTo))
+      eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
+      eventSourcedTestKit.runCommand[Done](replyTo => AlertDevice(alertMessage, replyTo))
+      eventSourcedTestKit.runCommand[Done](replyTo => StopAlert(replyTo))
 
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
         GetDeviceState(replyTo)
       )
 
-      result.reply shouldBe GetDeviceStateResponse(Some(Monitoring(device)))
+      result.reply shouldBe DeviceResponse(device, MONITORING)
       result.stateOfType[Monitoring].device shouldBe device
     }
 
     "not become disabled without an alert being stopping first" in {
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        InitializeDevice(replyTo)
-      )
-      eventSourcedTestKit.runCommand[Response](replyTo =>
-        AlertDevice(alertMessage, replyTo)
-      )
+      eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
+      eventSourcedTestKit.runCommand[Done](replyTo => AlertDevice(alertMessage, replyTo))
 
-      val testProbe = testKit.createTestProbe[Response]("test_probe")
+      val testProbe = testKit.createTestProbe[Done]("test_probe")
       val result = eventSourcedTestKit.runCommand(DisableDevice(testProbe.ref))
 
       testProbe.expectNoMessage(probeWaitDuration)
