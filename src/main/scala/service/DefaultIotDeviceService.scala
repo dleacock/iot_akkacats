@@ -60,17 +60,17 @@ class DefaultIotDeviceService(
     future
   }
 
-  override def retrieveDevice(id: String): Future[Either[String, Done]] = {
+  override def retrieveDevice(id: String): Future[Either[String, String]] = {
     val ref: EntityRef[PersistentDevice.Command] =
       sharding.entityRefFor(PersistentDevice.TypeKey, id)
 
     val eventualResponse: Future[PersistentDevice.Response] =
       ref.ask(replyTo => GetDeviceState(replyTo))
 
-    val future: Future[Either[String, Done]] = eventualResponse.map {
+    val future: Future[Either[String, String]] = eventualResponse.map {
       case Response.DeviceResponse(device, state) => {
         log.info(s"processDeviceEvent return $device in $state")
-        Right(Done)
+        Right(s"${device.id} ${device.maybeMessage.map(_.toString)} $state")
       }
       case _ => {
         log.info(s"processDeviceEvent return error for $id")

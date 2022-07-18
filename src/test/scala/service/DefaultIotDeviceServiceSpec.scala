@@ -1,25 +1,30 @@
 package service
 import actors.PersistentDevice
-import actors.PersistentDevice.Command
-import actors.PersistentDevice.Command.InitializeDevice
+import actors.PersistentDevice.{ Command, Device, Response }
+import actors.PersistentDevice.Command.{
+  AlertDevice,
+  GetDeviceState,
+  InitializeDevice
+}
+import actors.PersistentDevice.Response.DeviceResponse
+import actors.PersistentDevice.State.MONITORING
 import akka.Done
 import akka.actor.typed.ActorRef
-import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
+import akka.cluster.sharding.typed.scaladsl.{ ClusterSharding, EntityRef }
 import akka.util.Timeout
 import org.mockito.ArgumentMatchersSugar.any
 import org.mockito.IdiomaticMockito
-import org.mockito.MockitoSugar.{verify, when}
-import org.mockito.captor.{ArgCaptor, Captor}
+import org.mockito.MockitoSugar.{ verify, when }
+import org.mockito.captor.{ ArgCaptor, Captor }
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
-import org.scalatest.{BeforeAndAfterEach, EitherValues}
+import org.scalatest.{ BeforeAndAfterEach, EitherValues }
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
-// TODO do I need all these traits?
 class DefaultIotDeviceServiceSpec
     extends AnyWordSpecLike
     with Matchers
@@ -31,19 +36,18 @@ class DefaultIotDeviceServiceSpec
   type ActorRefF[T] = ActorRef[T] => Command
 
   private val mockClusterSharding = mock[ClusterSharding]
-  private val mockReplyTo = mock[ActorRef[Done]]
+  private val mockReplyToDone = mock[ActorRef[Done]]
+  private val mockReplyToResponse = mock[ActorRef[Response]]
   private val mockEntityRef = mock[EntityRef[Command]]
   private val id = UUID.randomUUID().toString
 
   private val service = new DefaultIotDeviceService(mockClusterSharding)
 
-  override def beforeEach(): Unit = reset(mockClusterSharding)
-
-  // TODO decouple the command from the replyTo
+  override def beforeEach(): Unit = reset(mockClusterSharding, mockEntityRef)
 
   "registerDevice" should {
     "register the device" in {
-      val command = InitializeDevice(mockReplyTo)
+      val command = InitializeDevice(mockReplyToDone)
 
       when(mockClusterSharding.entityRefFor(PersistentDevice.TypeKey, id))
         .thenReturn(mockEntityRef)
@@ -55,25 +59,64 @@ class DefaultIotDeviceServiceSpec
 
       result.futureValue shouldBe Right(Done)
 
-      assertCommand(command)
+      val argCaptor: Captor[ActorRefF[Done]] = ArgCaptor[ActorRefF[Done]]
 
+      verify(mockEntityRef).ask(argCaptor.capture)(any[Timeout])
+
+      val captured: ActorRefF[Done] = argCaptor.value
+
+      captured(mockReplyToDone) shouldBe command
     }
   }
 
-  "processDeviceEvent" should {}
+  "processDeviceEvent" should {
+    "process a device alert and it's message" in {
+      val alertMessage = "alert_message"
+      val command = AlertDevice(alertMessage, mockReplyToDone)
 
-  "retrieveDevice" should {}
+      when(mockClusterSharding.entityRefFor(PersistentDevice.TypeKey, id))
+        .thenReturn(mockEntityRef)
 
-  private def assertCommand[T](command: Command): Unit = {
-    val argCaptor: Captor[ActorRefF[T]] = ArgCaptor[ActorRefF[T]]
+      when(mockEntityRef.ask(any[ActorRefF[Done]])(any[Timeout]))
+        .thenReturn(Future(Done))
 
-    verify(mockEntityRef).ask(argCaptor.capture)(any[Timeout])
+      val result = service.processDeviceEvent(id, alertMessage)
 
-    val testRef = mock[ActorRef[T]]
+      result.futureValue shouldBe Right(Done)
 
-    val captured: ActorRefF[T] = argCaptor.value
-    captured(testRef) shouldBe command
+      val argCaptor: Captor[ActorRefF[Done]] = ArgCaptor[ActorRefF[Done]]
 
+      verify(mockEntityRef).ask(argCaptor.capture)(any[Timeout])
+
+      val captured: ActorRefF[Done] = argCaptor.value
+
+      captured(mockReplyToDone) shouldBe command
+    }
   }
 
+  "retrieveDevice" should {
+    "retrieve a device" in {
+      val command = GetDeviceState(mockReplyToResponse)
+      val deviceResponse = DeviceResponse(Device(id, None), MONITORING)
+
+      when(mockClusterSharding.entityRefFor(PersistentDevice.TypeKey, id))
+        .thenReturn(mockEntityRef)
+
+      when(mockEntityRef.ask(any[ActorRefF[Response]])(any[Timeout]))
+        .thenReturn(Future(deviceResponse))
+
+      val result = service.retrieveDevice(id)
+
+      result.futureValue shouldBe Right(s"$id None $MONITORING")
+
+      val argCaptor: Captor[ActorRefF[Response]] =
+        ArgCaptor[ActorRefF[Response]]
+
+      verify(mockEntityRef).ask(argCaptor.capture)(any[Timeout])
+
+      val captured: ActorRefF[Response] = argCaptor.value
+
+      captured(mockReplyToResponse) shouldBe command
+    }
+  }
 }
