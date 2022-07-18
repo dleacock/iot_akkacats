@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 
+// TODO Clean this up
 class DefaultIotDeviceService(
   sharding: ClusterSharding
 )(implicit ec: ExecutionContext)
