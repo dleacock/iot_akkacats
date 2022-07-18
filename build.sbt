@@ -26,5 +26,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-persistence-testkit" % akkaVersion % Test,
   "org.scalatest" %% "scalatest" % "3.2.9" % Test,
   "io.aeron" % "aeron-driver" % "1.37.0",
-  "io.aeron" % "aeron-client" % "1.37.0"
+  "io.aeron" % "aeron-client" % "1.37.0",
+  "org.scalatestplus" %% "mockito-4-5" % "3.2.12.0" % Test,
+  "org.mockito" %% "mockito-scala" % "1.16.37" % Test,
+  "org.mockito" %% "mockito-scala-scalatest" % "1.16.37" % Test
 )

@@ -26,7 +26,7 @@ class DefaultIotDeviceService(
     val eventualResponse: Future[Done] =
       ref.ask(replyTo => InitializeDevice(replyTo))
 
-    val future: Future[Either[String, Done.type]] = eventualResponse.map {
+    val future: Future[Either[String, Done]] = eventualResponse.map {
       case Done => {
         log.info(s"registerDevice call returned for $id")
         Right(Done)
@@ -47,7 +47,7 @@ class DefaultIotDeviceService(
     val eventualResponse: Future[Done] =
       ref.ask(replyTo => AlertDevice(message, replyTo))
 
-    val future: Future[Either[String, Done.type]] = eventualResponse.map {
+    val future: Future[Either[String, Done]] = eventualResponse.map {
       case Done=> {
         log.info(s"processDeviceEvent return $id with msg $message")
         Right(Done)
@@ -67,7 +67,7 @@ class DefaultIotDeviceService(
     val eventualResponse: Future[PersistentDevice.Response] =
       ref.ask(replyTo => GetDeviceState(replyTo))
 
-    val future: Future[Either[String, Done.type]] = eventualResponse.map {
+    val future: Future[Either[String, Done]] = eventualResponse.map {
       case Response.DeviceResponse(device, state) => {
         log.info(s"processDeviceEvent return $device in $state")
         Right(Done)
