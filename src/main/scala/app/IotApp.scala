@@ -26,6 +26,7 @@ object IotApp {
 
       val iotDeviceService = new DefaultIotDeviceService(sharding)
 
+      // TODO This will be sharded so needs to be builds from config
       IotDeviceServiceWebServer.start(
         routes = new Routes(iotDeviceService).routes,
         port = 1234,

@@ -11,6 +11,7 @@ import akka.cluster.sharding.typed.scaladsl.{
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 
+// TODO Needs notifier now right?
 object PersistentDevice {
 
   sealed trait Command
