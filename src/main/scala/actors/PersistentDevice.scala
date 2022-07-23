@@ -1,6 +1,5 @@
 package actors
 
-import actors.PersistentDevice.Response._
 import akka.Done
 import akka.actor.typed.{ ActorRef, ActorSystem, Behavior }
 import akka.cluster.sharding.typed.scaladsl.{
@@ -11,7 +10,6 @@ import akka.cluster.sharding.typed.scaladsl.{
 import akka.persistence.typed.PersistenceId
 import akka.persistence.typed.scaladsl.{ Effect, EventSourcedBehavior }
 
-// TODO Needs notifier now right?
 object PersistentDevice {
 
   sealed trait Command
@@ -21,7 +19,7 @@ object PersistentDevice {
 
     case class DisableDevice(replyTo: ActorRef[Done]) extends Command
 
-    case class AlertDevice(message: String, replyTo: ActorRef[Done])
+    case class AlertDevice(message: String, replyTo: ActorRef[Response])
         extends Command
 
     case class StopAlert(replyTo: ActorRef[Done]) extends Command
@@ -63,9 +61,10 @@ object PersistentDevice {
   }
 
   case class Device(id: String, maybeMessage: Option[String])
-  import State._
   import Command._
   import Event._
+  import Response._
+  import State._
 
   val commandHandler: (State, Command) => Effect[Event, State] =
     (state, command) => {
@@ -82,10 +81,16 @@ object PersistentDevice {
           }
         case Monitoring(device) =>
           command match {
-            case AlertDevice(message, replyTo) =>
+            case AlertDevice(message, replyTo) => {
               Effect
                 .persist(DeviceAlerted(message))
-                .thenReply(replyTo)(_ => Done)
+                .thenReply(replyTo)(_ =>
+                  DeviceResponse(
+                    device.copy(maybeMessage = Some(message)),
+                    MONITORING
+                  )
+                )
+            }
             case DisableDevice(replyTo) =>
               Effect
                 .persist(DeviceDisabled())
@@ -102,6 +107,11 @@ object PersistentDevice {
                 .thenReply(replyTo)(_ => Done)
             case GetDeviceState(replyTo) =>
               Effect.reply(replyTo)(DeviceResponse(device, ALERTING))
+            case AlertDevice(message, replyTo) => {
+              Effect
+                .persist(DeviceAlerted(message))
+                .thenReply(replyTo)(_ => DeviceResponse(device, ALERTING))
+            }
             case _ => Effect.none
           }
       }

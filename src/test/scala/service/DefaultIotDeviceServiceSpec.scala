@@ -1,25 +1,25 @@
 package service
-import actors.PersistentDevice
-import actors.PersistentDevice.{ Command, Device, Response }
-import actors.PersistentDevice.Command.{
-  AlertDevice,
-  GetDeviceState,
-  InitializeDevice
-}
+import actors.NotifierActor.{NotifierMessage, NotifierReply, NotifySuccess}
+import actors.{NotifierActor, PersistentDevice}
+import actors.PersistentDevice.{Command, Device, Response}
+import actors.PersistentDevice.Command.{AlertDevice, GetDeviceState, InitializeDevice}
 import actors.PersistentDevice.Response.DeviceResponse
 import actors.PersistentDevice.State.MONITORING
 import akka.Done
-import akka.actor.typed.ActorRef
-import akka.cluster.sharding.typed.scaladsl.{ ClusterSharding, EntityRef }
+import akka.actor.testkit.typed.scaladsl.ActorTestKit
+import akka.actor.typed.scaladsl.AskPattern.Askable
+import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
+import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import akka.util.Timeout
 import org.mockito.ArgumentMatchersSugar.any
 import org.mockito.IdiomaticMockito
-import org.mockito.MockitoSugar.{ verify, when }
-import org.mockito.captor.{ ArgCaptor, Captor }
+import org.mockito.MockitoSugar.{verify, when}
+import org.mockito.captor.{ArgCaptor, Captor}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
-import org.scalatest.{ BeforeAndAfterEach, EitherValues }
+import org.scalatest.{BeforeAndAfterEach, EitherValues}
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -35,13 +35,26 @@ class DefaultIotDeviceServiceSpec
 
   type ActorRefF[T] = ActorRef[T] => Command
 
+  private implicit val mockSystem: ActorSystem[_] = ActorTestKit.apply().system
+
   private val mockClusterSharding = mock[ClusterSharding]
   private val mockReplyToDone = mock[ActorRef[Done]]
   private val mockReplyToResponse = mock[ActorRef[Response]]
   private val mockEntityRef = mock[EntityRef[Command]]
+
+  private val mockNotifier: Behavior[NotifierMessage] = Behaviors.setup[NotifierMessage] { context =>
+    Behaviors.receiveMessage {
+      case NotifierActor.Notify(replyTo) => replyTo ! NotifySuccess
+        Behaviors.same
+    }
+  }
+
+  private val thing: ActorRef[NotifierMessage] = mockSystem.systemActorOf(mockNotifier, "thing")
+
   private val id = UUID.randomUUID().toString
 
-  private val service = new DefaultIotDeviceService(mockClusterSharding)
+  private val service =
+    new DefaultIotDeviceService(mockClusterSharding, thing)
 
   override def beforeEach(): Unit = reset(mockClusterSharding, mockEntityRef)
 
@@ -72,13 +85,13 @@ class DefaultIotDeviceServiceSpec
   "processDeviceEvent" should {
     "process a device alert and it's message" in {
       val alertMessage = "alert_message"
-      val command = AlertDevice(alertMessage, mockReplyToDone)
+      val command = AlertDevice(alertMessage, mockReplyToResponse)
 
       when(mockClusterSharding.entityRefFor(PersistentDevice.TypeKey, id))
         .thenReturn(mockEntityRef)
 
-      when(mockEntityRef.ask(any[ActorRefF[Done]])(any[Timeout]))
-        .thenReturn(Future(Done))
+      when(mockEntityRef.ask(any[ActorRefF[DeviceResponse]])(any[Timeout]))
+        .thenReturn(Future(DeviceResponse(new Device("123", None), MONITORING)))
 
       val result = service.processDeviceEvent(id, alertMessage)
 

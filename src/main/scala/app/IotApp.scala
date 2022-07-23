@@ -1,11 +1,13 @@
 package app
 
-import actors.PersistentDevice
 import actors.PersistentDevice.Command
-import akka.actor.typed.{ActorSystem, Behavior}
+import actors.{NotifierActor, PersistentDevice}
+import akka.NotUsed
 import akka.actor.typed.scaladsl.Behaviors
+import akka.actor.typed.{ActorSystem, Behavior}
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity}
 import http.{IotDeviceServiceWebServer, Routes}
+import notifier.HttpNotifier
 import service.DefaultIotDeviceService
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -17,19 +19,21 @@ object IotApp {
 
   private def behavior(): Behavior[Command] = {
     Behaviors.setup { context =>
-      val system: ActorSystem[_] = context.system
+      implicit val system: ActorSystem[_] = context.system
       val sharding = ClusterSharding(system)
 
       sharding.init(Entity(PersistentDevice.TypeKey) { entityContext =>
         PersistentDevice(entityContext.entityId)
       })
 
-      val iotDeviceService = new DefaultIotDeviceService(sharding)
+      val httpNotifier = new HttpNotifier("url") // grab from config
+      val notifierRef = context.spawn(NotifierActor(httpNotifier), "Notifier")
+      val iotDeviceService = new DefaultIotDeviceService(sharding, notifierRef)
 
       // TODO This will be sharded so needs to be builds from config
       IotDeviceServiceWebServer.start(
         routes = new Routes(iotDeviceService).routes,
-        port = 1234,
+        port = 1234, // grab from config
         system
       )
 

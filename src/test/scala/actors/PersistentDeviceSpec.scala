@@ -54,7 +54,7 @@ class PersistentDeviceSpec
     }
 
     "not become in an alerting state without initialization" in {
-      val testProbe = testKit.createTestProbe[Done]("test_probe")
+      val testProbe = testKit.createTestProbe[Response]("test_probe")
       val result =
         eventSourcedTestKit.runCommand(AlertDevice(alertMessage, testProbe.ref))
 
@@ -73,16 +73,16 @@ class PersistentDeviceSpec
     "become alerting when device is alerted after being initialized" in {
       eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
 
-      val result = eventSourcedTestKit.runCommand[Done](replyTo =>
+      val result = eventSourcedTestKit.runCommand[Response](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
-      result.reply shouldBe Done
+      result.reply shouldBe DeviceResponse(alertedDevice, MONITORING)
       result.stateOfType[Alerting].device shouldBe alertedDevice
     }
 
     "reply with alert message when queried when device is alerted" in {
       eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
-      eventSourcedTestKit.runCommand[Done](replyTo =>
+      eventSourcedTestKit.runCommand[Response](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
@@ -95,7 +95,7 @@ class PersistentDeviceSpec
 
     "stop alerting and go back to monitoring" in {
       eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
-      eventSourcedTestKit.runCommand[Done](replyTo =>
+      eventSourcedTestKit.runCommand[Response](replyTo =>
         AlertDevice(alertMessage, replyTo)
       )
 
@@ -107,7 +107,7 @@ class PersistentDeviceSpec
 
     "reply with no message when queried when device is back to monitor after alerted" in {
       eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
-      eventSourcedTestKit.runCommand[Done](replyTo => AlertDevice(alertMessage, replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(alertMessage, replyTo))
       eventSourcedTestKit.runCommand[Done](replyTo => StopAlert(replyTo))
 
       val result = eventSourcedTestKit.runCommand[Response](replyTo =>
@@ -120,7 +120,7 @@ class PersistentDeviceSpec
 
     "not become disabled without an alert being stopping first" in {
       eventSourcedTestKit.runCommand[Done](replyTo => InitializeDevice(replyTo))
-      eventSourcedTestKit.runCommand[Done](replyTo => AlertDevice(alertMessage, replyTo))
+      eventSourcedTestKit.runCommand[Response](replyTo => AlertDevice(alertMessage, replyTo))
 
       val testProbe = testKit.createTestProbe[Done]("test_probe")
       val result = eventSourcedTestKit.runCommand(DisableDevice(testProbe.ref))

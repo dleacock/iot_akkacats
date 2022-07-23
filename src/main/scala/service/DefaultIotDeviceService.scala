@@ -1,14 +1,19 @@
 package service
 
-import actors.PersistentDevice
+import actors.NotifierActor.{ NotifierMessage, Notify }
+import actors.{ NotifierActor, PersistentDevice }
 import actors.PersistentDevice.Command.{
   AlertDevice,
   GetDeviceState,
   InitializeDevice
 }
 import actors.PersistentDevice.Response
+import actors.PersistentDevice.Response.DeviceResponse
+import actors.PersistentDevice.State.{ ALERTING, MONITORING }
 import akka.Done
-import akka.cluster.sharding.typed.scaladsl.{ ClusterSharding, EntityRef }
+import akka.actor.typed.scaladsl.AskPattern._
+import akka.actor.typed.{ ActorRef, ActorSystem }
+import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.util.Timeout
 import org.slf4j.LoggerFactory
 
@@ -20,13 +25,17 @@ import scala.concurrent.{ ExecutionContext, Future }
 // TODO in order to make this more interesting of a project there needs to be another service and then this service
 // aggregates over them both. Can use EitherT as well I think
 class DefaultIotDeviceService(
-  sharding: ClusterSharding
-)(implicit ec: ExecutionContext)
+  sharding: ClusterSharding,
+  notifierActor: ActorRef[NotifierMessage]
+)(implicit ec: ExecutionContext,
+  implicit val system: ActorSystem[_])
     extends IotDeviceService {
 
   private val log = LoggerFactory.getLogger(this.getClass)
 
   private implicit val askTimeout: Timeout = Timeout(5.seconds)
+
+  notifierActor.ask(replyTo => Notify(replyTo))
 
   override def registerDevice(id: String): Future[Either[String, Done]] = {
     sharding
@@ -45,19 +54,36 @@ class DefaultIotDeviceService(
     id: String,
     message: String
   ): Future[Either[String, Done]] = {
-    sharding
+    // TODO THIS IS UGLY AND TERRIBLE
+
+    val future: Future[Either[String, Done.type]] = sharding
       .entityRefFor(PersistentDevice.TypeKey, id)
       .ask(replyTo => AlertDevice(message, replyTo))
       .map {
-        case Done => {
+        case Response.DeviceResponse(device, state) => {
           log.info(s"processDeviceEvent return $id with msg $message")
-          Right(Done)
+          val eventualReplyOrDone: Future[Either[String, Done.type]] =
+            state match {
+              case MONITORING =>
+                val eventualStringOrDone: Future[Either[String, Done.type]] =
+                  notifierActor.ask(replyTo => Notify(replyTo)).map {
+                    case NotifierActor.NotifySuccess        => Right(Done)
+                    case NotifierActor.NotifyFailed(reason) => Left(reason)
+                  }
+                eventualStringOrDone
+              case ALERTING =>
+                Future(Left("Device is already alerting - will not notify."))
+            }
+
+          eventualReplyOrDone
         }
         case _ => {
           log.info(s"processDeviceEvent return $id with msg $message")
-          Left("Error")
+          Future(Left("Error"))
         }
-      }
+      }.flatMap(x => x) // fix this lol
+
+    future
   }
 
   override def retrieveDevice(id: String): Future[Either[String, String]] = {
