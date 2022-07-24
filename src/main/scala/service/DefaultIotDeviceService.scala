@@ -67,8 +67,14 @@ class DefaultIotDeviceService(
               case MONITORING =>
                 val eventualStringOrDone: Future[Either[String, Done.type]] =
                   notifierActor.ask(replyTo => Notify(replyTo)).map {
-                    case NotifierActor.NotifySuccess        => Right(Done)
-                    case NotifierActor.NotifyFailed(reason) => Left(reason)
+                    case NotifierActor.NotifySuccess => {
+                      log.info("Notification Successful")
+                      Right(Done)
+                    }
+                    case NotifierActor.NotifyFailed(reason) => {
+                      log.info(s"Notification Failed - reason $reason")
+                      Left(reason)
+                    }
                   }
                 eventualStringOrDone
               case ALERTING =>
@@ -78,10 +84,11 @@ class DefaultIotDeviceService(
           eventualReplyOrDone
         }
         case _ => {
-          log.info(s"processDeviceEvent return $id with msg $message")
+          log.info(s"processDeviceEvent error return $id with msg $message")
           Future(Left("Error"))
         }
-      }.flatMap(x => x) // fix this lol
+      }
+      .flatMap(x => x) // fix this lol
 
     future
   }

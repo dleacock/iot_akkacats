@@ -1,13 +1,12 @@
 package service
-import actors.NotifierActor.{NotifierMessage, NotifierReply, NotifySuccess}
-import actors.{NotifierActor, PersistentDevice}
-import actors.PersistentDevice.{Command, Device, Response}
+import actors.NotifierActor.{NotifierMessage, NotifySuccess}
 import actors.PersistentDevice.Command.{AlertDevice, GetDeviceState, InitializeDevice}
 import actors.PersistentDevice.Response.DeviceResponse
 import actors.PersistentDevice.State.MONITORING
+import actors.PersistentDevice.{Command, Device, Response}
+import actors.{NotifierActor, PersistentDevice}
 import akka.Done
 import akka.actor.testkit.typed.scaladsl.ActorTestKit
-import akka.actor.typed.scaladsl.AskPattern.Askable
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
@@ -44,7 +43,10 @@ class DefaultIotDeviceServiceSpec
 
   private val mockNotifier: Behavior[NotifierMessage] = Behaviors.setup[NotifierMessage] { context =>
     Behaviors.receiveMessage {
-      case NotifierActor.Notify(replyTo) => replyTo ! NotifySuccess
+      case NotifierActor.Notify(replyTo) => {
+        context.system.log.info("Notifier Actor notifying...")
+        replyTo ! NotifySuccess
+      }
         Behaviors.same
     }
   }
@@ -86,24 +88,26 @@ class DefaultIotDeviceServiceSpec
     "process a device alert and it's message" in {
       val alertMessage = "alert_message"
       val command = AlertDevice(alertMessage, mockReplyToResponse)
+      val deviceResponse = DeviceResponse(Device(id, None), MONITORING)
 
       when(mockClusterSharding.entityRefFor(PersistentDevice.TypeKey, id))
         .thenReturn(mockEntityRef)
 
-      when(mockEntityRef.ask(any[ActorRefF[DeviceResponse]])(any[Timeout]))
-        .thenReturn(Future(DeviceResponse(new Device("123", None), MONITORING)))
+      when(mockEntityRef.ask(any[ActorRefF[Response]])(any[Timeout]))
+        .thenReturn(Future(deviceResponse))
 
       val result = service.processDeviceEvent(id, alertMessage)
 
       result.futureValue shouldBe Right(Done)
 
-      val argCaptor: Captor[ActorRefF[Done]] = ArgCaptor[ActorRefF[Done]]
+      val argCaptor: Captor[ActorRefF[Response]] =
+        ArgCaptor[ActorRefF[Response]]
 
       verify(mockEntityRef).ask(argCaptor.capture)(any[Timeout])
 
-      val captured: ActorRefF[Done] = argCaptor.value
+      val captured: ActorRefF[Response] = argCaptor.value
 
-      captured(mockReplyToDone) shouldBe command
+      captured(mockReplyToResponse) shouldBe command
     }
   }
 
